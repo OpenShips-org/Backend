@@ -1,0 +1,25 @@
+{
+    "name": "openships_api",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "start": "npx tsx ./src/index.ts",
+        "format": "npx prettier . --write"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "module",
+    "devDependencies": {
+        "@types/node": "^25.5.0",
+        "dotenv": "^17.3.1",
+        "prettier": "3.8.1",
+        "typescript": "^5.9.3"
+    },
+    "dependencies": {
+        "fastify": "^5.8.2",
+        "fastify-mariadb": "^2.0.0",
+        "ws": "^8.19.0"
+    }
+}
