@@ -1,8 +1,12 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyInstance } from 'fastify'
 import * as dotenv from 'dotenv'
 import { AISStreamClient } from './aisstream.js'
 import { validateTables } from './db.js'
 import fastifyMariaDB from 'fastify-mariadb'
+
+declare global {
+    var fastifyInstance: FastifyInstance | undefined
+}
 
 dotenv.config()
 
@@ -11,6 +15,8 @@ import vesselRoutes from './routes/vessel/index.js'
 const fastify = Fastify({
     logger: true,
 })
+
+globalThis.fastifyInstance = fastify
 
 fastify.register(fastifyMariaDB, {
     host: process.env.DB_HOST!,

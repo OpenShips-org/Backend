@@ -3,80 +3,102 @@ import {
     parseAisStreamTimestamp,
     parseDateForDatabase,
 } from '../utils/timeUtility.js'
+import type { VesselPosition } from '../types/positionTypes.js'
+import chalk from 'chalk';
+
+type CachedPosition = {
+    position: VesselPosition
+    lastUpdated: number
+}
+
+const lastPositionsCache = new Map<number, CachedPosition>()
+const historicalInsertQueue: VesselPosition[] = []
+const HISTORICAL_BATCH_SIZE = 50
+
+async function flushHistoricalQueue(fastify: FastifyInstance) {
+    if (historicalInsertQueue.length === 0) return
+
+    const rowsToInsert = historicalInsertQueue.splice(0, HISTORICAL_BATCH_SIZE)
+    const values = rowsToInsert
+        .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .join(',')
+    const params = rowsToInsert.flatMap((r) => [
+        r.mmsi,
+        r.ship_name,
+        r.navigation_status,
+        r.rot,
+        r.sog,
+        r.cog,
+        r.true_heading,
+        r.longitude,
+        r.latitude,
+        r.special_manoeuvre,
+        r.communication_state,
+        r.timestamp,
+    ])
+
+    await fastify.mariadb.query(
+        `INSERT INTO historical_vessel_positions 
+        (mmsi, ship_name, navigation_status, rot, sog, cog, true_heading, longitude, latitude, special_manoeuvre, communication_state, timestamp)
+        VALUES ${values}`,
+        params
+    )
+
+    console.log(chalk.green(`Inserted ${rowsToInsert.length} historical position records`))
+
+    for (const r of rowsToInsert) {
+        lastPositionsCache.set(parseInt(r.mmsi), {
+            position: r,
+            lastUpdated: Date.now(),
+        })
+    }
+}
+
+setInterval(() => flushHistoricalQueue(globalThis.fastifyInstance!), 5000)
+setInterval(
+    () => {
+        const now = Date.now()
+        for (const [mmsi, cached] of lastPositionsCache.entries()) {
+            if (now - cached.lastUpdated > 24 * 60 * 60 * 1000) {
+                lastPositionsCache.delete(mmsi)
+            }
+        }
+    },
+    60 * 60 * 1000
+)
 
 export async function handlePositionReportMessage(
     msg: any,
     fastify: FastifyInstance
 ) {
-    //#region Current position update
     try {
         const metaData = msg.MetaData
         const positionReport = msg.Message.PositionReport
 
         //#region Data validation
-        if (!positionReport.Valid) {
-            console.info(
-                `Received invalid position report for MMSI ${metaData.MMSI}, skipping database update.`
-            )
-            return
-        }
-
-        let coordsValid = true
+        if (!positionReport.Valid) return
+        const longitude = positionReport.Longitude
+        const latitude = positionReport.Latitude
         if (
-            typeof positionReport.Longitude !== 'number' ||
-            typeof positionReport.Latitude !== 'number'
-        ) {
-            coordsValid = false
-        } else if (
-            positionReport.Longitude < -180 ||
-            positionReport.Longitude > 180
-        ) {
-            coordsValid = false
-        } else if (
-            positionReport.Latitude < -90 ||
-            positionReport.Latitude > 90
-        ) {
-            coordsValid = false
-        }
-
-        if (!coordsValid) {
-            console.warn(
-                `Received position report for MMSI ${metaData.MMSI} with invalid coordinates (Longitude: ${positionReport.Longitude}, Latitude: ${positionReport.Latitude}). Skipping database update.`
-            )
+            typeof longitude !== 'number' ||
+            typeof latitude !== 'number' ||
+            longitude < -180 ||
+            longitude > 180 ||
+            latitude < -90 ||
+            latitude > 90
+        )
             return
-        }
         //#endregion
 
         //#region Timestamp validation
-        let parsedTimestamp = parseAisStreamTimestamp(metaData.time_utc)
-
-        try {
-            const date = new Date(parsedTimestamp)
-
-            if (isNaN(date.getTime())) {
-                console.error(
-                    `Invalid timestamp format received for MMSI ${metaData.MMSI}: ${parsedTimestamp}`
-                )
-                return
-            }
-
-            const now = new Date()
-            const timeDifference = Math.abs(now.getTime() - date.getTime())
-            const maxAllowedDifference = 5 * 60 * 1000
-
-            if (timeDifference > maxAllowedDifference) {
-                console.warn(
-                    `Received position report for MMSI ${metaData.MMSI} with timestamp ${parsedTimestamp} which is more than 5 minutes old. Skipping database update.`
-                )
-                return
-            }
-        } catch (err) {
-            console.error(
-                `Error validating timestamp for MMSI ${metaData.MMSI}:`,
-                err
-            )
+        const parsedTimestamp = parseAisStreamTimestamp(metaData.time_utc)
+        const timestampDate = new Date(parsedTimestamp)
+        if (isNaN(timestampDate.getTime())) return
+        const now = new Date()
+        if (Math.abs(now.getTime() - timestampDate.getTime()) > 5 * 60 * 1000)
             return
-        }
+        const timestamp = parseDateForDatabase(timestampDate)
+        if (!timestamp) return
         //#endregion
 
         //#region Data sorting
@@ -87,22 +109,12 @@ export async function handlePositionReportMessage(
         const sog = positionReport.Sog
         const cog = positionReport.Cog
         const trueHeading = positionReport.TrueHeading
-        const longitude = positionReport.Longitude
-        const latitude = positionReport.Latitude
         const specialManeuver = positionReport.SpecialManoeuvreIndicator
         const communicationState = positionReport.CommunicationState
-        const timestamp = parseDateForDatabase(new Date(parsedTimestamp))
-
-        if (!timestamp) {
-            console.error(
-                `Error formatting timestamp for MMSI ${metaData.MMSI}: ${parsedTimestamp}`
-            )
-            return
-        }
         //#endregion
 
-        //#region Database update
-        const result = await fastify.mariadb.query(
+        //#region Current Position Database update
+        const currentResult = await fastify.mariadb.query(
             `
             INSERT INTO current_vessel_positions (
                 mmsi, ship_name, navigation_status, rot, sog, cog, true_heading,
@@ -136,26 +148,84 @@ export async function handlePositionReportMessage(
                 timestamp,
             ]
         )
+        //#endregion
 
-        if (result.affectedRows === 1) {
-            console.log(
-                `Inserted new position report for MMSI ${mmsi} into current_vessel_positions.`
-            )
-        } else if (result.affectedRows === 2) {
-            console.log(
-                `Updated existing position report for MMSI ${mmsi} in current_vessel_positions.`
-            )
-        } else {
-            console.warn(
-                `Unexpected number of affected rows (${result.affectedRows}) when inserting/updating position report for MMSI ${mmsi}.`
+        //#region Historical position update
+        try {
+            let cached = lastPositionsCache.get(parseInt(mmsi))
+            let lastPosition = cached?.position
+
+            if (!lastPosition) {
+                const historyRows = (await fastify.mariadb.query(
+                    `
+    SELECT mmsi, ship_name, navigation_status, rot, sog, cog, true_heading,
+           longitude, latitude, special_manoeuvre, communication_state, timestamp
+    FROM historical_vessel_positions
+    WHERE mmsi = ?
+    ORDER BY timestamp DESC
+    LIMIT 1
+    `,
+                    [mmsi]
+                )) as VesselPosition[]
+                if (historyRows.length > 0) {
+                    const firstRow = historyRows[0]
+                    if (firstRow) {
+                        lastPosition = firstRow
+                        lastPositionsCache.set(parseInt(mmsi), {
+                            position: lastPosition,
+                            lastUpdated: Date.now(),
+                        })
+                    }
+                }
+            }
+
+            let shouldInsertHistory = false
+            if (!lastPosition) {
+                shouldInsertHistory = true
+            } else {
+                const positionChanged =
+                    lastPosition.longitude !== longitude ||
+                    lastPosition.latitude !== latitude
+
+                const lastTs = lastPosition.timestamp
+                    ? new Date(lastPosition.timestamp)
+                    : new Date(0)
+                const nowTs = new Date(timestamp)
+                const timeExceeded =
+                    nowTs.getTime() - lastTs.getTime() > 60 * 60 * 1000
+
+                if (positionChanged || timeExceeded) {
+                    shouldInsertHistory = true
+                }
+            }
+
+            if (shouldInsertHistory) {
+                historicalInsertQueue.push({
+                    mmsi,
+                    ship_name: shipName,
+                    navigation_status: navigationStatus,
+                    rot,
+                    sog,
+                    cog,
+                    true_heading: trueHeading,
+                    longitude,
+                    latitude,
+                    special_manoeuvre: specialManeuver,
+                    communication_state: communicationState,
+                    timestamp,
+                })
+                if (historicalInsertQueue.length >= HISTORICAL_BATCH_SIZE) {
+                    await flushHistoricalQueue(fastify)
+                }
+            }
+        } catch (err) {
+            console.error(
+                chalk.red(`Error updating historical positions for MMSI ${metaData.MMSI}:`),
+                err
             )
         }
         //#endregion
     } catch (err) {
-        console.error(
-            'Error processing position report while updating current position. Error message:',
-            err
-        )
+        console.error(chalk.red('Error processing position report:'), err)
     }
-    //#endregion
 }

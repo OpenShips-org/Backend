@@ -13,6 +13,6 @@ export async function dispatchMessage(msg: any, fastify: FastifyInstance) {
             await handleShipStaticDataMessage(msg, fastify)
             break
         default:
-            console.warn('Unhandled message type. Skipping type ' + type)
+            // console.warn('Unhandled message type. Skipping type ' + type)
     }
 }

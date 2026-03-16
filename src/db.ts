@@ -41,7 +41,7 @@ export async function validateTables(fastifyMariaDB: any) {
         `)
 
         await connection.query(`
-            CREATE TABLE IF NOT EXISTS vessel_static_info (
+            CREATE TABLE IF NOT EXISTS static_ship_data (
                 mmsi VARCHAR(20) PRIMARY KEY,
                 imo VARCHAR(20) NULL,
                 call_sign VARCHAR(50) NULL,
