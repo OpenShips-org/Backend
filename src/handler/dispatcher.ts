@@ -1,6 +1,6 @@
-import { handlePositionReportMessage } from './handler/PositionReport.js'
-import { handleShipStaticDataMessage } from './handler/ShipStaticData.js'
-import { handleBaseStationReportMessage } from './handler/BaseStationReport.js'
+import { handlePositionReportMessage } from './PositionReport.js'
+import { handleShipStaticDataMessage } from './ShipStaticData.js'
+import { handleBaseStationReportMessage } from './BaseStationReport.js'
 import type { FastifyInstance } from 'fastify'
 
 export async function dispatchMessage(msg: any, fastify: FastifyInstance) {

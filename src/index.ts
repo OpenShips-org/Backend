@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import * as dotenv from 'dotenv'
-import { AISStreamClient } from './aisstream.js'
-import { validateTables } from './db.js'
+import { AISStreamClient } from './data/aisstream.js'
+import { validateTables } from './utils/db.js'
 import fastifyMariaDB from 'fastify-mariadb'
 
 declare global {
