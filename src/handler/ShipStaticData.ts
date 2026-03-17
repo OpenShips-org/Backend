@@ -21,12 +21,12 @@ export async function handleShipStaticDataMessage(
 
         //#region Data sorting
         const mmsi = metaData.MMSI
-        const imo = shipStaticData.ImoNumber ?? null
+        const imo = shipStaticData.ImoNumber
         const callSign = shipStaticData.CallSign ?? null
         const shipName = shipStaticData.Name ?? null
         const destination = shipStaticData.Destination ?? null
-        const shipType = shipStaticData.ShipType ?? null
-        const maxDraught = shipStaticData.MaxStaticDraught ?? null
+        const shipType = shipStaticData.Type ?? null
+        const maxDraught = shipStaticData.MaximumStaticDraught ?? null
         const dimensionA = shipStaticData.Dimension.A ?? null
         const dimensionB = shipStaticData.Dimension.B ?? null
         const dimensionC = shipStaticData.Dimension.C ?? null
@@ -34,22 +34,22 @@ export async function handleShipStaticDataMessage(
         //#endregion
 
         //#region ETA validation and formatting
-        const etaData = shipStaticData.ETA
+        const etaData = shipStaticData.Eta
         let finalEta: string | null = null
 
         if (!etaData) {
-            console.warn(chalk.yellow(
-                `Received static ship data for MMSI ${metaData.MMSI} without ETA.`
-            ))
+            //console.warn(chalk.yellow(
+            //    `Received static ship data for MMSI ${metaData.MMSI} without ETA.`
+            //))
         } else if (
             etaData.Month === 0 ||
             etaData.Day === 0 ||
             etaData.Hour === 24 ||
             etaData.Minute === 60
         ) {
-            console.warn(chalk.yellow(
-                `Received static ship data for MMSI ${metaData.MMSI} with invalid ETA components (Month: ${etaData.Month}, Day: ${etaData.Day}, Hour: ${etaData.Hour}, Minute: ${etaData.Minute}). Setting ETA to null.`
-            ))
+            //console.warn(chalk.yellow(
+            //   `Received static ship data for MMSI ${metaData.MMSI} with invalid ETA components (Month: ${etaData.Month}, Day: ${etaData.Day}, Hour: ${etaData.Hour}, Minute: ${etaData.Minute}). Setting ETA to null.`
+            //))
         } else {
             const now = new Date()
             let year = now.getUTCFullYear()
@@ -92,13 +92,13 @@ export async function handleShipStaticDataMessage(
         )
 
         if (result.affectedRows === 1) {
-            console.log(chalk.yellow(
-                `Inserted static ship data for MMSI ${mmsi} into static_ship_data.`
-            ))
+            //console.log(chalk.yellow(
+            //    `Inserted static ship data for MMSI ${mmsi} into static_ship_data.`
+            //))
         } else if (result.affectedRows === 2) {
-            console.log(chalk.yellow(
-                `Updated static ship data for MMSI ${mmsi} in static_ship_data.`
-            ))
+            //console.log(chalk.yellow(
+            //    `Updated static ship data for MMSI ${mmsi} in static_ship_data.`
+            //))
         } else {
             console.warn(chalk.red(
                 `Unexpected result when inserting/updating static ship data for MMSI ${mmsi}: affectedRows = ${result.affectedRows}`

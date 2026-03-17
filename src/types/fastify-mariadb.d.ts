@@ -9,6 +9,7 @@ declare module 'fastify-mariadb' {
         database?: string
         connectionLimit?: number
         promise?: boolean
+        timezone?: string
         connectionString?: string
     }
 

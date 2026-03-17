@@ -6,6 +6,9 @@ export class AISStreamClient {
     private apiKey: string
     private url: string
     private fastify: FastifyInstance
+    private reconnectAttempts = 0
+    private readonly maxRetries = 5
+    private readonly retryDelay = 5000
 
     constructor(fastify: FastifyInstance) {
         this.fastify = fastify
@@ -38,6 +41,8 @@ export class AISStreamClient {
             }
 
             this.ws?.send(JSON.stringify(subscriptionMessage))
+
+            this.reconnectAttempts = 0
         }
 
         this.ws.onerror = (error) => {
@@ -46,6 +51,16 @@ export class AISStreamClient {
 
         this.ws.onclose = () => {
             console.log('WebSocket connection closed.')
+
+            if (this.reconnectAttempts < this.maxRetries) {
+                const delay =
+                    this.retryDelay * Math.pow(2, this.reconnectAttempts - 1)
+                setTimeout(() => this.createSocket(), delay)
+                console.log(
+                    `Reconnecting WebSocket... attempt ${this.reconnectAttempts + 1}`
+                )
+                this.reconnectAttempts++
+            }
         }
 
         this.ws.onmessage = async (event) => {

@@ -10,7 +10,7 @@ declare global {
 
 dotenv.config()
 
-import vesselRoutes from './routes/vessel/index.js'
+import Routes from './routes/index.js'
 
 const fastify = Fastify({
     logger: true,
@@ -25,9 +25,10 @@ fastify.register(fastifyMariaDB, {
     database: 'openships',
     connectionLimit: 5,
     promise: true,
+    timezone: 'Z',
 })
 
-fastify.register(vesselRoutes, { prefix: '/vessel' })
+fastify.register(Routes, { prefix: '/v1' })
 
 const start = async () => {
     try {

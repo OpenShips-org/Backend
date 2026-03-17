@@ -1,7 +1,12 @@
 export async function validateTables(fastifyMariaDB: any) {
     const connection = await fastifyMariaDB.getConnection()
 
-    // Create all required tables if they don't exist
+    try {
+        await connection.query("SET time_zone = '+00:00'")
+    } catch (err) {
+        console.warn('Could not set session time_zone to UTC:', err)
+    }
+
     try {
         await connection.query(`
             CREATE TABLE IF NOT EXISTS current_vessel_positions (
@@ -16,7 +21,7 @@ export async function validateTables(fastifyMariaDB: any) {
                 latitude DOUBLE NULL,
                 special_manoeuvre INT NULL,
                 communication_state INT NULL,
-                timestamp DATETIME NULL
+                timestamp TIMESTAMP NULL
             )
         `)
 
@@ -34,7 +39,7 @@ export async function validateTables(fastifyMariaDB: any) {
                 latitude DOUBLE NULL,
                 special_manoeuvre INT NULL,
                 communication_state INT NULL,
-                timestamp DATETIME NOT NULL,
+                timestamp TIMESTAMP NOT NULL,
                 INDEX(mmsi),
                 INDEX idx_mmsi_timestamp (mmsi, timestamp)
             )
@@ -54,7 +59,18 @@ export async function validateTables(fastifyMariaDB: any) {
                 dimensionB INT NULL,
                 dimensionC INT NULL,
                 dimensionD INT NULL,
-                timestamp DATETIME NULL
+                timestamp TIMESTAMP NULL
+            )
+        `)
+
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS base_station_reports (
+                mmsi VARCHAR(20) PRIMARY KEY,
+                latitude DOUBLE NULL,
+                longitude DOUBLE NULL,
+                long_range_enabled BOOLEAN NULL,
+                communication_state INT NULL,
+                timestamp TIMESTAMP NOT NULL
             )
         `)
     } catch (err) {

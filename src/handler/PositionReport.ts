@@ -95,6 +95,10 @@ export async function handlePositionReportMessage(
         const timestampDate = new Date(parsedTimestamp)
         if (isNaN(timestampDate.getTime())) return
         const now = new Date()
+        if (timestampDate.getTime() > now.getTime()) {
+            console.log(chalk.red(`Skipping received position report with future timestamp: ${timestampDate.toISOString()}`))
+            return
+        }
         if (Math.abs(now.getTime() - timestampDate.getTime()) > 5 * 60 * 1000)
             return
         const timestamp = parseDateForDatabase(timestampDate)
