@@ -1,4 +1,4 @@
-import { dispatchMessage } from './handler/dispatcher.js'
+import { dispatchMessage } from '../handler/dispatcher.js'
 import type { FastifyInstance } from 'fastify'
 
 export class AISStreamClient {

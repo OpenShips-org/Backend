@@ -1,4 +1,4 @@
-import { parseDateForDatabase } from '../utils/timeUtility.js'
+import { parseAisStreamTimestamp, parseDateForDatabase } from '../utils/timeUtility.js'
 import type { FastifyInstance } from 'fastify'
 import chalk from 'chalk';
 
@@ -17,6 +17,21 @@ export async function handleShipStaticDataMessage(
             )
             return
         }
+        //#endregion
+
+        //#region Timestamp validation
+        const parsedTimestamp = parseAisStreamTimestamp(metaData.time_utc)
+        const timestampDate = new Date(parsedTimestamp)
+        if (isNaN(timestampDate.getTime())) return
+        const now = new Date()
+        if (timestampDate.getTime() > now.getTime()) {
+            console.log(chalk.red(`Skipping received position report with future timestamp: ${timestampDate.toISOString()}`))
+            return
+        }
+        if (Math.abs(now.getTime() - timestampDate.getTime()) > 5 * 60 * 1000)
+            return
+        const timestamp = parseDateForDatabase(timestampDate)
+        if (!timestamp) return
         //#endregion
 
         //#region Data sorting
@@ -74,7 +89,7 @@ export async function handleShipStaticDataMessage(
 
         //#region Database update
         const result = await fastify.mariadb.query(
-            'INSERT INTO static_ship_data (mmsi, imo, call_sign, ship_name, destination, ship_type, max_draught, dimensionA, dimensionB, dimensionC, dimensionD, eta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE imo = VALUES(imo), call_sign = VALUES(call_sign), ship_name = VALUES(ship_name), destination = VALUES(destination), ship_type = VALUES(ship_type), max_draught = VALUES(max_draught), dimensionA = VALUES(dimensionA), dimensionB = VALUES(dimensionB), dimensionC = VALUES(dimensionC), dimensionD = VALUES(dimensionD), eta = VALUES(eta)',
+            'INSERT INTO static_ship_data (mmsi, imo, call_sign, ship_name, destination, ship_type, max_draught, dimensionA, dimensionB, dimensionC, dimensionD, eta, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE imo = VALUES(imo), call_sign = VALUES(call_sign), ship_name = VALUES(ship_name), destination = VALUES(destination), ship_type = VALUES(ship_type), max_draught = VALUES(max_draught), dimensionA = VALUES(dimensionA), dimensionB = VALUES(dimensionB), dimensionC = VALUES(dimensionC), dimensionD = VALUES(dimensionD), eta = VALUES(eta), timestamp = VALUES(timestamp)',
             [
                 mmsi,
                 imo,
@@ -88,6 +103,7 @@ export async function handleShipStaticDataMessage(
                 dimensionC,
                 dimensionD,
                 finalEta,
+                timestamp
             ]
         )
 

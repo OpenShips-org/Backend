@@ -107,7 +107,7 @@ export async function handlePositionReportMessage(
 
         //#region Data sorting
         const mmsi = metaData.MMSI
-        const shipName = metaData.ShipName
+        const shipName = metaData.ShipName.trim()
         const navigationStatus = positionReport.NavigationalStatus
         const rot = positionReport.RateOfTurn
         const sog = positionReport.Sog
@@ -115,6 +115,11 @@ export async function handlePositionReportMessage(
         const trueHeading = positionReport.TrueHeading
         const specialManeuver = positionReport.SpecialManoeuvreIndicator
         const communicationState = positionReport.CommunicationState
+
+        const mmsiNumber = Number(mmsi)
+        if (isNaN(mmsiNumber) || mmsiNumber <= 0) {
+            return
+        }
         //#endregion
 
         //#region Current Position Database update
