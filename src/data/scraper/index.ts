@@ -1,7 +1,7 @@
 import { EquasisScraper } from './sites/equasis.org.js'
 import { DnvScraper } from './sites/dnv.js'
 
-import type { VesselData } from '../../types/scraper.js'
+import type { VesselData } from '../../types/scraperTypes.js'
 import type { FastifyInstance } from 'fastify'
 import chalk from 'chalk'
 

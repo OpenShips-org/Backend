@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import {
     parseAisStreamTimestamp,
     parseDateForDatabase,
-} from '../utils/timeUtility.js'
+} from '../utils/dateUtility.js'
 import type { VesselPosition } from '../types/aisTypes.js'
 import chalk from 'chalk';
 
@@ -12,65 +12,87 @@ type CachedPosition = {
 }
 
 const lastPositionsCache = new Map<number, CachedPosition>()
-const historicalInsertQueue: VesselPosition[] = []
-const HISTORICAL_BATCH_SIZE = 50
+const historicalBatch: any[] = []
 
-async function flushHistoricalQueue(fastify: FastifyInstance) {
-    if (historicalInsertQueue.length === 0) return
+const batchSize = 500
 
-    const rowsToInsert = historicalInsertQueue.splice(0, HISTORICAL_BATCH_SIZE)
-    const values = rowsToInsert
-        .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .join(',')
-    const params = rowsToInsert.flatMap((r) => [
-        r.mmsi,
-        r.ship_name,
-        r.navigation_status,
-        r.rot,
-        r.sog,
-        r.cog,
-        r.true_heading,
-        r.longitude,
-        r.latitude,
-        r.special_manoeuvre,
-        r.communication_state,
-        r.timestamp,
-    ])
-
-    await fastify.mariadb.query(
-        `INSERT INTO historical_vessel_positions 
-        (mmsi, ship_name, navigation_status, rot, sog, cog, true_heading, longitude, latitude, special_manoeuvre, communication_state, timestamp)
-        VALUES ${values}`,
-        params
-    )
-
-    console.log(chalk.green(`Inserted ${rowsToInsert.length} historical position records`))
-
-    for (const r of rowsToInsert) {
-        lastPositionsCache.set(parseInt(r.mmsi), {
-            position: r,
-            lastUpdated: Date.now(),
-        })
-    }
-}
-
-setInterval(() => flushHistoricalQueue(globalThis.fastifyInstance!), 5000)
 setInterval(
     () => {
         const now = Date.now()
         for (const [mmsi, cached] of lastPositionsCache.entries()) {
-            if (now - cached.lastUpdated > 24 * 60 * 60 * 1000) {
+            if (now - cached.lastUpdated > 5 * 60 * 1000) {
                 lastPositionsCache.delete(mmsi)
             }
         }
     },
-    60 * 60 * 1000
+    60 * 1000
 )
+
+export async function loadLastPositionsFromDatabase(fastify: FastifyInstance) {
+    try {
+        const results = await fastify.mariadb.query(
+            'SELECT * from current_vessel_positions LIMIT 10000'
+        )
+        for (const row of results) {
+            const mmsi = row.mmsi
+            const position: VesselPosition = {
+                mmsi: row.mmsi,
+                shipName: row.ship_name,
+                navigationStatus: row.navigation_status,
+                rot: row.rot,
+                sog: row.sog,
+                cog: row.cog,
+                trueHeading: row.true_heading,
+                longitude: row.longitude,
+                latitude: row.latitude,
+                specialManoeuvre: row.special_manoeuvre,
+                communicationState: row.communication_state,
+                timestamp: row.timestamp,
+            }
+            lastPositionsCache.set(mmsi, {
+                position,
+                lastUpdated: Date.now(),
+            })
+        }
+        console.log(chalk.green(`Loaded ${lastPositionsCache.size} recent positions into cache`))
+    } catch (err) {
+        console.error(chalk.red('Error loading last positions from database:'), err)
+    }
+}
+
+export function startHistoricalBatchFlush(fastify: FastifyInstance) {
+    setInterval(async () => {
+        if (historicalBatch.length === 0) return
+        const placeholders = historicalBatch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
+        const flatValues = historicalBatch.flat()
+        try {
+            await fastify.mariadb.query(
+                `
+                INSERT INTO historical_vessel_positions (
+                    mmsi, ship_name, navigation_status, rot, sog, cog, true_heading,
+                    longitude, latitude, special_manoeuvre, communication_state, timestamp
+                ) VALUES ${placeholders}
+            `,
+                flatValues
+            )
+            const flushedCount = historicalBatch.length
+            historicalBatch.length = 0
+            console.log(chalk.green(`Flushed ${flushedCount} historical positions to database`))
+        } catch (err) {
+            console.error(chalk.red('Error flushing historical batch:'), err)
+        }
+    }, 5000)
+}
 
 export async function handlePositionReportMessage(
     msg: any,
     fastify: FastifyInstance
 ) {
+
+    if (lastPositionsCache.size === 0) {
+        await loadLastPositionsFromDatabase(fastify)
+    }
+
     try {
         const metaData = msg.MetaData
         const positionReport = msg.Message.PositionReport
@@ -113,7 +135,7 @@ export async function handlePositionReportMessage(
         const sog = positionReport.Sog
         const cog = positionReport.Cog
         const trueHeading = positionReport.TrueHeading
-        const specialManeuver = positionReport.SpecialManoeuvreIndicator
+        const specialManoeuvre = positionReport.SpecialManoeuvreIndicator
         const communicationState = positionReport.CommunicationState
 
         const mmsiNumber = Number(mmsi)
@@ -152,7 +174,7 @@ export async function handlePositionReportMessage(
                 trueHeading,
                 longitude,
                 latitude,
-                specialManeuver,
+                specialManoeuvre,
                 communicationState,
                 timestamp,
             ]
@@ -160,33 +182,38 @@ export async function handlePositionReportMessage(
         //#endregion
 
         //#region Historical position update
-        try {
-            let cached = lastPositionsCache.get(parseInt(mmsi))
-            let lastPosition = cached?.position
+        try { 
 
-            if (!lastPosition) {
-                const historyRows = (await fastify.mariadb.query(
-                    `
-    SELECT mmsi, ship_name, navigation_status, rot, sog, cog, true_heading,
-           longitude, latitude, special_manoeuvre, communication_state, timestamp
-    FROM historical_vessel_positions
-    WHERE mmsi = ?
-    ORDER BY timestamp DESC
-    LIMIT 1
-    `,
+            let cached = lastPositionsCache.get(parseInt(mmsi))
+            
+            if (!cached) {
+                const [dbResult] = await fastify.mariadb.query(
+                    'SELECT * FROM current_vessel_positions WHERE mmsi = ?',
                     [mmsi]
-                )) as VesselPosition[]
-                if (historyRows.length > 0) {
-                    const firstRow = historyRows[0]
-                    if (firstRow) {
-                        lastPosition = firstRow
-                        lastPositionsCache.set(parseInt(mmsi), {
-                            position: lastPosition,
-                            lastUpdated: Date.now(),
-                        })
+                )
+                if (dbResult) {
+                    cached = {
+                        position: {
+                            mmsi: dbResult.mmsi,
+                            shipName: dbResult.ship_name,
+                            navigationStatus: dbResult.navigation_status,
+                            rot: dbResult.rot,
+                            sog: dbResult.sog,
+                            cog: dbResult.cog,
+                            trueHeading: dbResult.true_heading,
+                            longitude: dbResult.longitude,
+                            latitude: dbResult.latitude,
+                            specialManoeuvre: dbResult.special_manoeuvre,
+                            communicationState: dbResult.communication_state,
+                            timestamp: dbResult.timestamp,
+                        },
+                        lastUpdated: Date.now(),
                     }
+                    lastPositionsCache.set(parseInt(mmsi), cached)
                 }
             }
+
+            const lastPosition = cached ? cached.position : null
 
             let shouldInsertHistory = false
             if (!lastPosition) {
@@ -209,24 +236,41 @@ export async function handlePositionReportMessage(
             }
 
             if (shouldInsertHistory) {
-                historicalInsertQueue.push({
+                historicalBatch.push([
                     mmsi,
-                    ship_name: shipName,
-                    navigation_status: navigationStatus,
+                    shipName,
+                    navigationStatus,
                     rot,
                     sog,
                     cog,
-                    true_heading: trueHeading,
+                    trueHeading,
                     longitude,
                     latitude,
-                    special_manoeuvre: specialManeuver,
-                    communication_state: communicationState,
+                    specialManoeuvre,
+                    communicationState,
                     timestamp,
-                })
-                if (historicalInsertQueue.length >= HISTORICAL_BATCH_SIZE) {
-                    await flushHistoricalQueue(fastify)
-                }
+                ])
             }
+
+            if (historicalBatch.length >= batchSize) {
+                const placeholders = historicalBatch
+                    .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                    .join(', ')
+                const flatValues = historicalBatch.flat()
+                await fastify.mariadb.query(
+                    `
+                    INSERT INTO historical_vessel_positions (
+                        mmsi, ship_name, navigation_status, rot, sog, cog, true_heading,
+                        longitude, latitude, special_manoeuvre, communication_state, timestamp
+                    ) VALUES ${placeholders}
+                `,
+                    flatValues
+                )
+                const flushedCount = historicalBatch.length
+                historicalBatch.length = 0
+                console.log(chalk.green(`Flushed ${flushedCount} historical positions to database`))
+            }
+
         } catch (err) {
             console.error(
                 chalk.red(`Error updating historical positions for MMSI ${metaData.MMSI}:`),

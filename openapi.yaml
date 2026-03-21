@@ -154,6 +154,121 @@ paths:
         '500':
           description: Internal server error.
 
+  /vessels/info/standard/{mmsi}:
+    get:
+      summary: Get the latest static information of a vessel by its MMSI.
+      parameters:
+        - in: path
+          name: mmsi
+          schema:
+            type: integer
+          required: true
+          description: Maritime Mobile Service Identity of the vessel.
+      responses:
+        '200':
+          description: The latest static information of the specified vessel.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardVesselInfo'
+        '400':
+          description: Bad request. Invalid MMSI parameter.
+        '401':
+          description: Unauthorized. Invalid or missing API key.
+        '404':
+          description: Not found. No static information found for the specified MMSI.
+        '429':
+          description: Too many requests. Rate limit exceeded.
+        '500':
+          description: Internal server error.
+
+  /base-stations/position/box:
+    get:
+      summary: Get base station positions within a specified bounding box.
+      parameters:
+        - in: query
+          name: minLat
+          schema:
+            type: number
+            format: float
+          required: true
+          description: Minimum latitude of the bounding box.
+        - in: query
+          name: maxLat
+          schema:
+            type: number
+            format: float
+          required: true
+          description: Maximum latitude of the bounding box.
+        - in: query
+          name: minLon
+          schema:
+            type: number
+            format: float
+          required: true
+          description: Minimum longitude of the bounding box.
+        - in: query
+          name: maxLon
+          schema:
+            type: number
+            format: float
+          required: true
+          description: Maximum longitude of the bounding box.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+          required: false
+          description: Maximum number of base station positions to return.
+      responses:
+        '200':
+          description: A list of base station positions within the specified bounding box.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BaseStationPosition'
+        '400':
+          description: Bad request. Invalid parameters.
+        '401':
+          description: Unauthorized. Invalid or missing API key.
+        '404':
+          description: Not found. No base station positions found within the specified bounding box.
+        '429':
+          description: Too many requests. Rate limit exceeded.
+        '500':
+          description: Internal server error.
+
+  /base-stations/position/{mmsi}:
+    get:
+      summary: Get the latest position of a base station by its MMSI.
+      parameters:
+        - in: path
+          name: mmsi
+          schema:
+            type: integer
+          required: true
+          description: Maritime Mobile Service Identity of the base station.
+      responses:
+        '200':
+          description: The latest position of the specified base station.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseStationPosition'
+        '400':
+          description: Bad request. Invalid MMSI parameter.
+        '401':
+          description: Unauthorized. Invalid or missing API key.
+        '404':
+          description: Not found. No position found for the specified MMSI.
+        '429':
+          description: Too many requests. Rate limit exceeded.
+        '500':
+          description: Internal server error.
+
 components:
   schemas:
     VesselPosition:
@@ -201,6 +316,76 @@ components:
           type: string
           format: date-time
           description: Timestamp of the vessel's position report.
+
+    StandardVesselInfo:
+      type: object
+      properties:
+        mmsi:
+          type: integer
+          description: Maritime Mobile Service Identity of the vessel.
+        imo:
+          type: integer
+          description: International Maritime Organization number of the vessel.
+        vesselName:
+          type: string
+          description: Name of the vessel.
+        destination:
+          type: string
+          description: Destination of the vessel.
+        callSign:
+          type: string
+          description: Call sign of the vessel.
+        vesselType:
+          type: integer
+          description: Type of the vessel.
+        dimensions:
+          type: object
+          properties:
+            A:
+              type: integer
+              description: Distance from the GPS antenna to the bow of the vessel in meters.
+            B:
+              type: integer              
+              description: Distance from the GPS antenna to the stern of the vessel in meters.
+            C:
+              type: integer
+              description: Distance from the GPS antenna to the port side of the vessel in meters.
+            D:
+              type: integer
+              description: Distance from the GPS antenna to the starboard side of the vessel in meters.
+        eta:
+          type: string
+          format: date-time
+          description: Estimated time of arrival at the destination port (ISO 8601 format).
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the vessel's static information report.
+
+    BaseStationPosition:
+      type: object
+      properties:
+        mmsi:
+          type: integer
+          description: Maritime Mobile Service Identity of the base station.
+        latitude:
+          type: number
+          format: float
+          description: Latitude of the base station's position.
+        longitude:
+          type: number
+          format: float
+          description: Longitude of the base station's position.
+        longRangeEnabled:
+          type: boolean
+          description: Indicates if long-range AIS is enabled for the base station.
+        communicationState:
+          type: integer
+          description: Communication state of the base station.
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the base station's position report.
 
   securitySchemes:
     ApiKeyAuth:

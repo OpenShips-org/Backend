@@ -1,5 +1,5 @@
-import type { Certificate, Classification, Condition, Dimensions, Hull, Identification, Machinery, Owner, Survey, Yard } from "./dnv.js";
-import type { ClassificationInfo, CompanyInfo, HistoricalCompany, HistoricalFlag, HistoricalName, InspectionInfo, VesselBasicInfo } from "./equasis.js";
+import type { Certificate, Classification, Condition, Dimensions, Hull, Identification, Machinery, Owner, Survey, Yard } from "./dnvTypes.js";
+import type { ClassificationInfo, CompanyInfo, HistoricalCompany, HistoricalFlag, HistoricalName, InspectionInfo, VesselBasicInfo } from "./equasisTypes.js";
 
 export type VesselData = {
     imoNumber: number,

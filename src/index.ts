@@ -3,7 +3,7 @@ import * as dotenv from 'dotenv'
 import { AISStreamClient } from './data/aisstream.js'
 import { validateTables } from './utils/db.js'
 import fastifyMariaDB from 'fastify-mariadb'
-import * as Scraper from './data/scraper/index.js' 
+import { loadLastPositionsFromDatabase, startHistoricalBatchFlush } from './handler/PositionReport.js'
 
 declare global {
     var fastifyInstance: FastifyInstance | undefined
@@ -46,9 +46,13 @@ const AISClient = new AISStreamClient(fastify)
 async function doStartupTasks() {
     console.log('Performing startup tasks...')
 
+    await fastify.ready()
+
     await validateTables(fastify.mariadb)
     await AISClient.createSocket()
-    void Scraper.startScraping()
+
+    await loadLastPositionsFromDatabase(fastify)
+    startHistoricalBatchFlush(fastify)
 
     console.log('Startup tasks completed.')
 }

@@ -13,7 +13,7 @@ import type {
     HistoricalName,
     InspectionInfo,
     VesselBasicInfo,
-} from '../../../types/equasis.js'
+} from '../../../types/equasisTypes.js'
 
 type EquasisTab = 'ship_info' | 'inspections' | 'ship_history'
 

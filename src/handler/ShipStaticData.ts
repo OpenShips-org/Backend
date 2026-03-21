@@ -1,4 +1,4 @@
-import { parseAisStreamTimestamp, parseDateForDatabase } from '../utils/timeUtility.js'
+import { parseAisStreamTimestamp, parseDateForDatabase } from '../utils/dateUtility.js'
 import type { FastifyInstance } from 'fastify'
 import chalk from 'chalk';
 

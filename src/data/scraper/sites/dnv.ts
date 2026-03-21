@@ -1,6 +1,6 @@
 import axios, { type AxiosInstance } from 'axios'
 import chalk from 'chalk'
-import type { DnvData } from '../../../types/dnv.js'
+import type { DnvData } from '../../../types/dnvTypes.js'
 
 
 export class DnvScraper {
