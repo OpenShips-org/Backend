@@ -73,6 +73,29 @@ export async function validateTables(fastifyMariaDB: any) {
                 timestamp TIMESTAMP NOT NULL
             )
         `)
+
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS vessel_data (
+                imo_number INT PRIMARY KEY,
+                mmsi_number BIGINT NULL,
+                vessel_name VARCHAR(255) NULL,
+                flag VARCHAR(100) NULL,
+                call_sign VARCHAR(50) NULL,
+                vessel_type VARCHAR(100) NULL,
+                gross_tonnage INT NULL,
+                dwt INT NULL,
+                year_built INT NULL,
+                status VARCHAR(100) NULL,
+                status_date DATE NULL,
+                last_update TIMESTAMP NULL,
+                has_dnv_entry BOOLEAN NOT NULL,
+                has_equasis_entry BOOLEAN NOT NULL,
+                dnv_data JSON NULL,
+                equasis_data JSON NULL,
+                last_scrape TIMESTAMP NULL
+            )
+        `)
+
     } catch (err) {
         console.error('Error validating tables:', err)
         throw err

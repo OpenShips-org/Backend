@@ -315,16 +315,19 @@ class EquasisParser {
                 data.status = value
                 const statusDateMatch = thirdColumn.match(/(since|during).+/i)
                 if (statusDateMatch?.[0]) {
-                    data.status_date = statusDateMatch[0]
+                    const statusDate = this.parseDate(statusDateMatch[0])
+                    if (statusDate) {
+                        data.status_date = statusDate
+                    }
                 }
             }
         })
 
         const updateBadge = $('p.badge.gris-bleu-copyright.badge-notification').first()
         if (updateBadge.length > 0) {
-            const dateMatch = updateBadge.text().match(/(\d{2}\/\d{2}\/\d{4})/)
-            if (dateMatch?.[1]) {
-                data.last_update = dateMatch[1]
+            const lastUpdate = this.parseDate(updateBadge.text())
+            if (lastUpdate) {
+                data.last_update = lastUpdate
             }
         }
 
@@ -383,7 +386,7 @@ class EquasisParser {
 
             const imo = this.emptyToUndefined(this.cleanText($(cells.get(0)).text()))
             const address = this.emptyToUndefined(this.cleanText($(cells.get(3)).text()))
-            const dateEffect = this.emptyToUndefined(this.cleanText($(cells.get(4)).text()))
+            const dateEffect = this.parseDate(this.cleanText($(cells.get(4)).text()))
 
             companies.push({
                 ...(imo ? { imo } : {}),
@@ -407,11 +410,12 @@ class EquasisParser {
             }
 
             const status = this.cleanText($(item).find('span.badge').first().text())
-            const dateEffect = $(item)
+            const dateEffectText = $(item)
                 .find('p')
                 .toArray()
                 .map(element => this.cleanText($(element).text()))
                 .find(text => /since|during/i.test(text))
+            const dateEffect = dateEffectText ? this.parseDate(dateEffectText) : undefined
 
             classifications.push({
                 society,
@@ -446,7 +450,7 @@ class EquasisParser {
                     inspections.push({
                         ...(authority ? { authority } : {}),
                         ...(port ? { port } : {}),
-                        date: this.cleanText($(cells.get(2)).text()),
+                        date: this.parseDate(this.cleanText($(cells.get(2)).text())) ?? new Date(NaN),
                         detention: this.cleanText($(cells.get(3)).text()),
                         psc_organization: this.cleanText($(cells.get(4)).text()),
                         ...(inspectionType ? { inspection_type: inspectionType } : {}),
@@ -471,7 +475,7 @@ class EquasisParser {
 
             names.push({
                 name: this.cleanText($(cells.get(0)).text()),
-                date_effect: this.cleanText($(cells.get(1)).text()),
+                date_effect: this.parseDate(this.cleanText($(cells.get(1)).text())) ?? new Date(NaN),
                 source: this.cleanText($(cells.get(2)).text()),
             })
         })
@@ -490,7 +494,7 @@ class EquasisParser {
 
             flags.push({
                 flag: this.cleanText($(cells.get(0)).text()),
-                date_effect: this.cleanText($(cells.get(1)).text()),
+                date_effect: this.parseDate(this.cleanText($(cells.get(1)).text())) ?? new Date(NaN),
                 source: this.cleanText($(cells.get(2)).text()),
             })
         })
@@ -510,7 +514,7 @@ class EquasisParser {
             companies.push({
                 company: this.cleanText($(cells.get(0)).text()),
                 role: this.cleanText($(cells.get(1)).text()),
-                date_effect: this.cleanText($(cells.get(2)).text()),
+                date_effect: this.parseDate(this.cleanText($(cells.get(2)).text())) ?? new Date(NaN),
                 source: this.cleanText($(cells.get(3)).text()),
             })
         })
@@ -532,6 +536,24 @@ class EquasisParser {
 
     private emptyToUndefined(value: string): string | undefined {
         return this.isEmpty(value) ? undefined : value
+    }
+
+    private parseDate(value: string): Date | undefined {
+        const normalized = value.trim()
+        if (!normalized) {
+            return undefined
+        }
+
+        const match = normalized.match(/(\d{2})[./-](\d{2})[./-](\d{4})/)
+        if (match?.[1] && match[2] && match[3]) {
+            const day = Number(match[1])
+            const month = Number(match[2])
+            const year = Number(match[3])
+            return new Date(Date.UTC(year, month - 1, day))
+        }
+
+        const parsed = new Date(normalized)
+        return Number.isNaN(parsed.getTime()) ? undefined : parsed
     }
 
     private toOptionalNumber(value: string): number | undefined {

@@ -12,10 +12,12 @@ async function vesselInfoRoutes(
     fastify.get<{ Params: VesselInfoParams }>('/:mmsi/static', async (request, reply) => {
         const { mmsi } = request.params
 
+        //#region Validation
         const mmsiNumber = Number(mmsi)
         if (isNaN(mmsiNumber) || mmsiNumber <= 0) {
             return reply.status(400).send({ error: 'Invalid MMSI' })
         }
+        //#endregion
 
         const response = await fastify.mariadb.query(
             `SELECT * 

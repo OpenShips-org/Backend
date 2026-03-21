@@ -3,7 +3,7 @@ import {
     parseAisStreamTimestamp,
     parseDateForDatabase,
 } from '../utils/timeUtility.js'
-import type { VesselPosition } from '../types/positionTypes.js'
+import type { VesselPosition } from '../types/aisTypes.js'
 import chalk from 'chalk';
 
 type CachedPosition = {

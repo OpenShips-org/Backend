@@ -1,0 +1,211 @@
+openapi: 3.2.0
+info:
+  title: OpenShips API
+  description: Open source API for AIS data and vessel information.
+  version: 1.0.0
+servers:
+  - url: https://api.openships.de/v1/external
+    description: Production server
+  
+paths:
+  /vessels/position/box:
+    get:
+      summary: Get vessel positions within a specified bounding box.
+      parameters:
+        - in: query
+          name: minLat
+          schema:
+            type: number
+            format: float
+          required: true
+          description: Minimum latitude of the bounding box.
+        - in: query
+          name: maxLat
+          schema:
+            type: number
+            format: float
+          required: true
+          description: Maximum latitude of the bounding box.
+        - in: query
+          name: minLon
+          schema:
+            type: number
+            format: float
+          required: true
+          description: Minimum longitude of the bounding box.
+        - in: query
+          name: maxLon
+          schema:
+            type: number
+            format: float
+          required: true
+          description: Maximum longitude of the bounding box.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+          required: false
+          description: Maximum number of vessel positions to return.
+      responses:
+        '200':
+          description: A list of vessel positions within the specified bounding box.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VesselPosition'
+        '400':
+          description: Bad request. Invalid parameters.
+        '401':
+          description: Unauthorized. Invalid or missing API key.
+        '404':
+          description: Not found. No vessel positions found within the specified bounding box.
+        '429':
+          description: Too many requests. Rate limit exceeded.
+        '500':
+          description: Internal server error.
+
+  /vessels/position/{mmsi}:
+    get:
+      summary: Get the latest position of a vessel by its MMSI.
+      parameters:
+        - in: path
+          name: mmsi
+          schema:
+            type: integer
+          required: true
+          description: Maritime Mobile Service Identity of the vessel.
+      responses:
+        '200':
+          description: The latest position of the specified vessel.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VesselPosition'
+        '400':
+          description: Bad request. Invalid MMSI parameter.
+        '401':
+          description: Unauthorized. Invalid or missing API key.
+        '404':
+          description: Not found. No position found for the specified MMSI.
+        '429':
+          description: Too many requests. Rate limit exceeded.
+        '500':
+          description: Internal server error.
+
+  /vessels/position/history/{mmsi}:
+    get:
+      summary: Get the historical positions of a vessel by its MMSI.
+      parameters:
+        - in: path
+          name: mmsi
+          schema:
+            type: integer
+          required: true
+          description: Maritime Mobile Service Identity of the vessel.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+          required: false
+          description: Maximum number of historical vessel positions to return.
+        - in: query
+          name: startTime
+          schema:
+            type: string
+            format: date-time
+          required: false
+          description: Start time for the historical positions (ISO 8601 format).
+        - in: query
+          name: endTime
+          schema:
+            type: string
+            format: date-time
+          required: false
+          description: End time for the historical positions (ISO 8601 format).
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          required: false
+          description: Order of the historical positions (ascending or descending by timestamp).
+      responses:
+        '200':
+          description: A list of historical vessel positions for the specified MMSI.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VesselPosition'
+        '400':
+          description: Bad request. Invalid parameters.
+        '401':
+          description: Unauthorized. Invalid or missing API key.
+        '404':
+          description: Not found. No historical positions found for the specified MMSI.
+        '429':
+          description: Too many requests. Rate limit exceeded.
+        '500':
+          description: Internal server error.
+
+components:
+  schemas:
+    VesselPosition:
+      type: object
+      properties:
+        mmsi:
+          type: integer
+          description: Maritime Mobile Service Identity of the vessel.
+        latitude:
+          type: number
+          format: float
+          description: Latitude of the vessel's position.
+        longitude:
+          type: number
+          format: float
+          description: Longitude of the vessel's position.
+        vesselName:
+          type: string
+          description: Name of the vessel.
+        rateOfTurn:
+          type: number
+          format: float
+          description: Rate of turn of the vessel.
+        speedOverGround:
+          type: number
+          format: float
+          description: Speed over ground of the vessel.
+        courseOverGround:
+          type: number
+          format: float                      
+          description: Course over ground of the vessel.
+        heading:
+          type: integer
+          description: Heading of the vessel.
+        communicationState:
+          type: integer
+          description: Communication state of the vessel.
+        specialManoeuvreIndicator:
+          type: integer
+          description: Special manoeuvre indicator of the vessel.
+        navigationalStatus:
+          type: integer
+          description: Navigational status of the vessel.
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the vessel's position report.
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+security:
+  - ApiKeyAuth: []

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { FastifyPluginOptions } from 'fastify'
 
-import type { VesselPosition } from '../../../types/positionTypes.js'
+import type { VesselPosition } from '../../../types/aisTypes.js'
 
 interface PositionParams {
     mmsi: number
@@ -30,11 +30,13 @@ async function positionRoutes(
         async (request, reply) => {
             const { mmsi } = request.params
 
+            //#region Validation
             const mmsiNumber = Number(mmsi)
             if (isNaN(mmsiNumber) || mmsiNumber <= 0) {
                 return reply.status(400).send({ error: 'Invalid MMSI' })
             }
-
+            //#endregion
+            
             const response: VesselPosition[] = await fastify.mariadb.query(
                 `SELECT * 
              FROM current_vessel_positions
@@ -64,9 +66,11 @@ async function positionRoutes(
     fastify.get<{ Querystring: HistoryQuery, Params: PositionParams }>(
         '/:mmsi/history',
         async (request, reply) => {
+
             const { mmsi } = request.params
             const { limit = 100, start, end } = request.query
 
+            //#region Validation
             const mmsiNumber = Number(mmsi)
             if (isNaN(mmsiNumber) || mmsiNumber <= 0) {
                 return reply.status(400).send({ error: 'Invalid MMSI' })
@@ -101,11 +105,22 @@ async function positionRoutes(
                 values.push(endDate.toISOString())
             }
 
+            if (start && end) {
+                const startDate = new Date(start)
+                const endDate = new Date(end)
+                if (startDate > endDate) {
+                    return reply.status(400).send({ error: 'Start date must be before end date' })
+                }
+            }
+            //#endregion
+
+            //#region Query Construction
             let sql = 'SELECT * FROM historical_vessel_positions'
             if (whereClauses.length)
                 sql += ' WHERE ' + whereClauses.join(' AND ')
             sql += ' ORDER BY timestamp DESC LIMIT ?'
             values.push(limitNumber)
+            //#endregion
 
             const response: VesselPosition[] = await fastify.mariadb.query(
                 sql,
@@ -129,6 +144,7 @@ async function positionRoutes(
                 maxLon,
             } = request.query
 
+            //#region Validation
             const limitNumber = Number(limit)
             const minLatNumber =
                 minLat !== undefined ? Number(minLat) : undefined
@@ -175,6 +191,15 @@ async function positionRoutes(
                 return reply.status(400).send({ error: 'Invalid maxLon' })
             }
 
+            if (minLatNumber !== undefined && maxLatNumber !== undefined && minLatNumber > maxLatNumber) {
+                return reply.status(400).send({ error: 'minLat must be less than or equal to maxLat' })
+            }
+            if (minLonNumber !== undefined && maxLonNumber !== undefined && minLonNumber > maxLonNumber) {
+                return reply.status(400).send({ error: 'minLon must be less than or equal to maxLon' })
+            }
+            //#endregion
+
+            //#region Query Construction
             let whereClauses: string[] = []
             let values: any[] = []
 
@@ -200,6 +225,7 @@ async function positionRoutes(
                 sql += ' WHERE ' + whereClauses.join(' AND ')
             sql += ' LIMIT ?'
             values.push(limitNumber)
+            //#endregion
 
             const response: VesselPosition[] = await fastify.mariadb.query(
                 sql,

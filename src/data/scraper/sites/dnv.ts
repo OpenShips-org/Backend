@@ -56,4 +56,23 @@ export class DnvScraper {
             return null
         }
     }
+
+    async isInDNV(imo: string) : Promise<boolean> {
+        try {
+            const response = await this.axios.get(`/vessel/get?term=${imo}`)
+            const data = response.data
+
+            if (response.status === 404) {
+                return false
+            } else if (response.status !== 200) {
+                console.log(chalk.red(`Error checking DNV for IMO ${imo}: ${response.statusText}`))
+                return false
+            }
+
+            return data?.vessels?.length > 0
+        } catch (error) {
+            console.log(chalk.red(`Error checking DNV for IMO ${imo}: ${error}`))
+            return false
+        }
+    }
 }

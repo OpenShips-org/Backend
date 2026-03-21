@@ -10,8 +10,8 @@ export type VesselBasicInfo = {
     vessel_type?: string
     year_built?: number
     status?: string
-    status_date?: string
-    last_update?: string
+    status_date?: Date
+    last_update?: Date
 }
 
 export type CompanyInfo = {
@@ -19,19 +19,19 @@ export type CompanyInfo = {
     name: string
     role: string
     address?: string
-    date_effect?: string
+    date_effect?: Date
 }
 
 export type ClassificationInfo = {
     society: string
     status: string
-    date_effect?: string
+    date_effect?: Date
 }
 
 export type InspectionInfo = {
     authority?: string
     port?: string
-    date: string
+    date: Date
     detention: string
     psc_organization: string
     inspection_type?: string
@@ -42,20 +42,20 @@ export type InspectionInfo = {
 
 export type HistoricalName = {
     name: string
-    date_effect: string
+    date_effect: Date
     source: string
 }
 
 export type HistoricalFlag = {
     flag: string
-    date_effect: string
+    date_effect: Date
     source: string
 }
 
 export type HistoricalCompany = {
     company: string
     role: string
-    date_effect: string
+    date_effect: Date
     source: string
 }
 
