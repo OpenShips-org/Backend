@@ -21,7 +21,7 @@ export class Scraper {
 
 		setInterval(() => {
 			this.updateOldVessels().catch(error => console.error(chalk.red('Error updating old vessels:'), error))
-		}, 10 * 60 * 1000);
+		}, 10 * 60 * 1000); // Every 10 minutes
 	}
 
 	async getVesselData(imo: number): Promise<VesselData> {

@@ -11,7 +11,7 @@ export default function Routes(
     fastify.register(internalRoutes, { prefix: '/internal' })
     fastify.register(externalRoutes, { prefix: '/external' })
 
-    fastify.get('/', async (request, reply) => {
+    fastify.get('/', {schema: {hide: true}}, async (request, reply) => {
         return {}
     })
 }

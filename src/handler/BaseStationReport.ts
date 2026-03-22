@@ -47,7 +47,7 @@ export async function handleBaseStationReportMessage(
 
         //#region Database update
         const result = await fastify.mariadb.query(`
-            INSERT INTO base_station_reports (mmsi, latitude, longitude, longRangeEnabled, communicationState, timestamp)
+            INSERT INTO base_stations (mmsi, latitude, longitude, longRangeEnabled, communicationState, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 latitude = VALUES(latitude),

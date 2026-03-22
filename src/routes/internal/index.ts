@@ -9,7 +9,7 @@ export default function internalRoutes(
 ) {
     fastify.register(vesselRoutes, { prefix: '/vessel' })
 
-    fastify.get('/', async (request, reply) => {
-        return { vessel: '404' }
+    fastify.get('/', {schema: { hide: true }}, async (request, reply) => {
+        throw fastify.httpErrors.notFound()
     })
 }

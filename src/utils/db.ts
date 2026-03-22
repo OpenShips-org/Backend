@@ -64,7 +64,7 @@ export async function validateTables(fastifyMariaDB: any) {
         `)
 
         await connection.query(`
-            CREATE TABLE IF NOT EXISTS base_station_reports (
+            CREATE TABLE IF NOT EXISTS base_stations (
                 mmsi VARCHAR(20) PRIMARY KEY,
                 latitude DOUBLE NULL,
                 longitude DOUBLE NULL,

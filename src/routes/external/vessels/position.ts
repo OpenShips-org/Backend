@@ -4,6 +4,7 @@ import type { FastifyPluginOptions } from 'fastify'
 import type { PositionBoxQuery, MMSIParam, HistoryQuery } from '../types.js'
 import { validateBoxParameters } from '../utils.js'
 import type { VesselPosition } from '../../../types/aisTypes.js'
+import { VesselPositionSchema } from '../../../schemas/vessel.js'
 
 export default function positionRoutes(
     fastify: FastifyInstance,
@@ -24,6 +25,25 @@ export default function positionRoutes(
                         limit: { type: 'integer', minimum: 1, maximum: 1000 },
                     },
                 },
+                response: {
+                    200: {
+                        type: 'array',
+                        items: VesselPositionSchema,
+                    },
+                    400: {
+                        type: 'object',
+                        properties: {
+                            error: { type: 'string' },
+                        },
+                    },
+                    500: {
+                        type: 'object',
+                        properties: {
+                            error: { type: 'string' },
+                        },
+                    },
+                },
+                tags: ['Vessels'],
             },
         },
         async (request, reply) => {
@@ -76,6 +96,22 @@ export default function positionRoutes(
                         mmsi: { type: 'string', pattern: '^[0-9]{9}$' },
                     },
                 },
+                response: {
+                    200: VesselPositionSchema,
+                    404: {
+                        type: 'object',
+                        properties: {
+                            error: { type: 'string' },
+                        },
+                    },
+                    500: {
+                        type: 'object',
+                        properties: {
+                            error: { type: 'string' },
+                        },
+                    },
+                },
+                tags: ['Vessels'],
             },
         },
         async (request, reply) => {
@@ -122,6 +158,25 @@ export default function positionRoutes(
                         order: { type: 'string', enum: ['asc', 'desc'] },
                     },
                 },
+                response: {
+                    200: {
+                        type: 'array',
+                        items: VesselPositionSchema,
+                    },
+                    400: {
+                        type: 'object',
+                        properties: {
+                            error: { type: 'string' },
+                        },
+                    },
+                    500: {
+                        type: 'object',
+                        properties: {
+                            error: { type: 'string' },
+                        },
+                    },
+                },
+                tags: ['Vessels'],
             },
         },
         async (request, reply) => {
