@@ -42,20 +42,20 @@ export async function handleBaseStationReportMessage(
         const latitude = baseStationReport.Latitude;
         const longitude = baseStationReport.Longitude;
         const longRangeEnabled = baseStationReport.LongRangeEnable;
-        const communication_state = baseStationReport.CommunicationState;
+        const communicationState = baseStationReport.CommunicationState;
         //#endregion
 
         //#region Database update
         const result = await fastify.mariadb.query(`
-            INSERT INTO base_station_reports (mmsi, latitude, longitude, long_range_enabled, communication_state, timestamp)
+            INSERT INTO base_station_reports (mmsi, latitude, longitude, longRangeEnabled, communicationState, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 latitude = VALUES(latitude),
                 longitude = VALUES(longitude),
-                long_range_enabled = VALUES(long_range_enabled),
-                communication_state = VALUES(communication_state),
+                longRangeEnabled = VALUES(longRangeEnabled),
+                communicationState = VALUES(communicationState),
                 timestamp = VALUES(timestamp)
-        `, [mmsi, latitude, longitude, longRangeEnabled, communication_state, timestamp])
+        `, [mmsi, latitude, longitude, longRangeEnabled, communicationState, timestamp])
         //#endregion
 
     } catch (err) {

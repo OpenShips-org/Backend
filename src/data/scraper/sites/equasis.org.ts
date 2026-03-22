@@ -261,71 +261,116 @@ class EquasisParser {
             }
         }
 
-        $('div.row').each((_, row) => {
-            const columns = $(row).find('div[class*="col-"]')
-            if (columns.length < 2) {
+        $('div.access-body div.row').each((_, row) => {
+            const visibleColumns = $(row)
+                .find('div[class*="col-"]')
+                .not('.hidden-lg, .hidden-md')
+            
+            if (visibleColumns.length < 2) {
                 return
             }
 
-            const label = this.cleanText($(columns.get(0)).text()).toLowerCase()
-            const value = this.cleanText($(columns.get(1)).text())
-            const thirdColumn = columns.length > 2 ? this.cleanText($(columns.get(2)).text()) : ''
-
-            if (!label || !value) {
+            const labelCol = visibleColumns.eq(0)
+            const labelText = this.cleanText(labelCol.text()).toLowerCase()
+            
+            if (!labelText) {
                 return
             }
 
-            if (label.includes('flag')) {
-                if (!data.flag) {
-                    data.flag = value
+            if (labelText.includes('flag')) {
+                // For flag, second column has the image, third has the country
+                const countryCol = visibleColumns.eq(2)
+                const countryText = this.cleanText(countryCol.text())
+                
+                if (countryText) {
+                    const countryMatch = countryText.match(/^\((.+)\)$/)
+                    if (countryMatch?.[1]) {
+                        data.flag = countryMatch[1]
+                    }
                 }
 
-                const imageSource = $(columns.get(1)).find('img').first().attr('src')
+                const imageSource = visibleColumns.eq(1).find('img').first().attr('src')
                 const flagMatch = imageSource?.match(/\/flags\/([A-Z]+)\./)
                 if (flagMatch?.[1]) {
                     data.flag_code = flagMatch[1]
                 }
-
-                const countryMatch = thirdColumn.match(/^\((.+)\)$/)
-                if (countryMatch?.[1]) {
-                    data.flag = countryMatch[1]
+            } else if (labelText.includes('call sign')) {
+                const valueCol = visibleColumns.eq(1)
+                const value = this.cleanText(valueCol.text())
+                if (value) {
+                    data.call_sign = value
                 }
-            } else if (label.includes('call sign')) {
-                data.call_sign = value
-            } else if (label.includes('mmsi')) {
-                data.mmsi = value
-            } else if (label.includes('gross tonnage')) {
+            } else if (labelText.includes('mmsi')) {
+                const valueCol = visibleColumns.eq(1)
+                const value = this.cleanText(valueCol.text())
+                if (value) {
+                    data.mmsi = value
+                }
+            } else if (labelText.includes('gross tonnage')) {
+                const valueCol = visibleColumns.eq(1)
+                const value = this.cleanText(valueCol.text())
                 const grossTonnage = this.toOptionalNumber(value)
                 if (grossTonnage !== undefined) {
                     data.gross_tonnage = grossTonnage
                 }
-            } else if (label.includes('dwt')) {
+                
+                // Look for date in following columns
+                const dateCol = visibleColumns.eq(2)
+                const dateText = this.cleanText(dateCol.text())
+                const dateMatch = this.parseDate(dateText)
+                if (dateMatch) {
+                    // This might be "since" date, but we're not storing it separately
+                }
+            } else if (labelText.includes('dwt')) {
+                const valueCol = visibleColumns.eq(1)
+                const value = this.cleanText(valueCol.text())
                 const dwt = this.toOptionalNumber(value)
                 if (dwt !== undefined) {
                     data.dwt = dwt
                 }
-            } else if (label.includes('type of ship')) {
-                data.vessel_type = value
-            } else if (label.includes('year of build') || label.includes('year built')) {
+            } else if (labelText.includes('type of ship')) {
+                const valueCol = visibleColumns.eq(1)
+                const value = this.cleanText(valueCol.text())
+                if (value) {
+                    data.vessel_type = value
+                }
+                
+                // Look for date in following columns
+                const dateCol = visibleColumns.eq(2)
+                const dateText = this.cleanText(dateCol.text())
+                const dateMatch = this.parseDate(dateText)
+                if (dateMatch) {
+                    // This might be "since" date, but we're not storing it separately
+                }
+            } else if (labelText.includes('year of build') || labelText.includes('year built')) {
+                const valueCol = visibleColumns.eq(1)
+                const value = this.cleanText(valueCol.text())
                 const yearBuilt = this.toOptionalNumber(value)
                 if (yearBuilt !== undefined) {
                     data.year_built = yearBuilt
                 }
-            } else if (label === 'status') {
-                data.status = value
-                const statusDateMatch = thirdColumn.match(/(since|during).+/i)
-                if (statusDateMatch?.[0]) {
-                    const statusDate = this.parseDate(statusDateMatch[0])
-                    if (statusDate) {
-                        data.status_date = statusDate
-                    }
+            } else if (labelText.includes('status')) {
+                const valueCol = visibleColumns.eq(1)
+                const statusText = this.cleanText(valueCol.text())
+                if (statusText) {
+                    data.status = statusText
+                }
+                
+                // Look for date in following columns
+                const dateCol = visibleColumns.eq(2)
+                const dateText = this.cleanText(dateCol.text())
+                const statusDate = this.parseDate(dateText)
+                if (statusDate) {
+                    data.status_date = statusDate
                 }
             }
         })
 
         const updateBadge = $('p.badge.gris-bleu-copyright.badge-notification').first()
         if (updateBadge.length > 0) {
-            const lastUpdate = this.parseDate(updateBadge.text())
+            const updateText = updateBadge.text()
+            const dateMatch = updateText.match(/(\d{2}[./-]\d{2}[./-]\d{4})/)
+            const lastUpdate = dateMatch ? this.parseDate(dateMatch[1]!) : undefined
             if (lastUpdate) {
                 data.last_update = lastUpdate
             }

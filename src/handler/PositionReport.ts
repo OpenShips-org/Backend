@@ -37,12 +37,12 @@ export async function loadLastPositionsFromDatabase(fastify: FastifyInstance) {
             const mmsi = row.mmsi
             const position: VesselPosition = {
                 mmsi: row.mmsi,
-                shipName: row.ship_name,
-                navigationStatus: row.navigation_status,
-                rot: row.rot,
-                sog: row.sog,
-                cog: row.cog,
-                trueHeading: row.true_heading,
+                vesselName: row.vessel_name,
+                navigationalStatus: row.navigational_status,
+                rateOfTurn: row.rate_of_turn,
+                speedOverGround: row.speed_over_ground,
+                courseOverGround: row.course_over_ground,
+                heading: row.heading,
                 longitude: row.longitude,
                 latitude: row.latitude,
                 specialManoeuvre: row.special_manoeuvre,
@@ -69,8 +69,8 @@ export function startHistoricalBatchFlush(fastify: FastifyInstance) {
             await fastify.mariadb.query(
                 `
                 INSERT INTO historical_vessel_positions (
-                    mmsi, ship_name, navigation_status, rot, sog, cog, true_heading,
-                    longitude, latitude, special_manoeuvre, communication_state, timestamp
+                    mmsi, vesselName, navigationalStatus, rateOfTurn, speedOverGround, courseOverGround, heading,
+                    longitude, latitude, specialManoeuvre, communicationState, timestamp
                 ) VALUES ${placeholders}
             `,
                 flatValues
@@ -129,12 +129,12 @@ export async function handlePositionReportMessage(
 
         //#region Data sorting
         const mmsi = metaData.MMSI
-        const shipName = metaData.ShipName.trim()
-        const navigationStatus = positionReport.NavigationalStatus
-        const rot = positionReport.RateOfTurn
-        const sog = positionReport.Sog
-        const cog = positionReport.Cog
-        const trueHeading = positionReport.TrueHeading
+        const vesselName = metaData.ShipName.trim()
+        const navigationalStatus = positionReport.NavigationalStatus
+        const rateOfTurn = positionReport.RateOfTurn
+        const speedOverGround = positionReport.Sog
+        const courseOverGround = positionReport.Cog
+        const heading = positionReport.TrueHeading
         const specialManoeuvre = positionReport.SpecialManoeuvreIndicator
         const communicationState = positionReport.CommunicationState
 
@@ -148,30 +148,30 @@ export async function handlePositionReportMessage(
         const currentResult = await fastify.mariadb.query(
             `
             INSERT INTO current_vessel_positions (
-                mmsi, ship_name, navigation_status, rot, sog, cog, true_heading,
-                longitude, latitude, special_manoeuvre, communication_state, timestamp
+                mmsi, vesselName, navigationalStatus, rateOfTurn, speedOverGround, courseOverGround, heading,
+                longitude, latitude, specialManoeuvre, communicationState, timestamp
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-                ship_name = VALUES(ship_name),
-                navigation_status = VALUES(navigation_status),
-                rot = VALUES(rot),
-                sog = VALUES(sog),
-                cog = VALUES(cog),
-                true_heading = VALUES(true_heading),
+                vesselName = VALUES(vesselName),
+                navigationalStatus = VALUES(navigationalStatus),
+                rateOfTurn = VALUES(rateOfTurn),
+                speedOverGround = VALUES(speedOverGround),
+                courseOverGround = VALUES(courseOverGround),
+                heading = VALUES(heading),
                 longitude = VALUES(longitude),
                 latitude = VALUES(latitude),
-                special_manoeuvre = VALUES(special_manoeuvre),
-                communication_state = VALUES(communication_state),
+                specialManoeuvre = VALUES(specialManoeuvre),
+                communicationState = VALUES(communicationState),
                 timestamp = VALUES(timestamp)
         `,
             [
                 mmsi,
-                shipName,
-                navigationStatus,
-                rot,
-                sog,
-                cog,
-                trueHeading,
+                vesselName,
+                navigationalStatus,
+                rateOfTurn,
+                speedOverGround,
+                courseOverGround,
+                heading,
                 longitude,
                 latitude,
                 specialManoeuvre,
@@ -195,12 +195,12 @@ export async function handlePositionReportMessage(
                     cached = {
                         position: {
                             mmsi: dbResult.mmsi,
-                            shipName: dbResult.ship_name,
-                            navigationStatus: dbResult.navigation_status,
-                            rot: dbResult.rot,
-                            sog: dbResult.sog,
-                            cog: dbResult.cog,
-                            trueHeading: dbResult.true_heading,
+                            vesselName: dbResult.vessel_name,
+                            navigationalStatus: dbResult.navigational_status,
+                            rateOfTurn: dbResult.rate_of_turn,
+                            speedOverGround: dbResult.speed_over_ground,
+                            courseOverGround: dbResult.course_over_ground,
+                            heading: dbResult.heading,
                             longitude: dbResult.longitude,
                             latitude: dbResult.latitude,
                             specialManoeuvre: dbResult.special_manoeuvre,
@@ -238,12 +238,12 @@ export async function handlePositionReportMessage(
             if (shouldInsertHistory) {
                 historicalBatch.push([
                     mmsi,
-                    shipName,
-                    navigationStatus,
-                    rot,
-                    sog,
-                    cog,
-                    trueHeading,
+                    vesselName,
+                    navigationalStatus,
+                    rateOfTurn,
+                    speedOverGround,
+                    courseOverGround,
+                    heading,
                     longitude,
                     latitude,
                     specialManoeuvre,
@@ -260,8 +260,8 @@ export async function handlePositionReportMessage(
                 await fastify.mariadb.query(
                     `
                     INSERT INTO historical_vessel_positions (
-                        mmsi, ship_name, navigation_status, rot, sog, cog, true_heading,
-                        longitude, latitude, special_manoeuvre, communication_state, timestamp
+                        mmsi, vesselName, navigationalStatus, rateOfTurn, speedOverGround, courseOverGround, heading,
+                        longitude, latitude, specialManoeuvre, communicationState, timestamp
                     ) VALUES ${placeholders}
                 `,
                     flatValues

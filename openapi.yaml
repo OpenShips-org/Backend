@@ -103,6 +103,7 @@ paths:
           name: mmsi
           schema:
             type: integer
+          pattern: '^[0-9]{9}$'
           required: true
           description: Maritime Mobile Service Identity of the vessel.
         - in: query

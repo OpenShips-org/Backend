@@ -3,19 +3,25 @@ import * as dotenv from 'dotenv'
 import { AISStreamClient } from './data/aisstream.js'
 import { validateTables } from './utils/db.js'
 import fastifyMariaDB from 'fastify-mariadb'
+import fastifySensible from '@fastify/sensible'
 import { loadLastPositionsFromDatabase, startHistoricalBatchFlush } from './handler/PositionReport.js'
+import { Scraper } from './data/scraper/index.js'
+import Routes from './routes/index.js'
 
+//#region Config
 declare global {
     var fastifyInstance: FastifyInstance | undefined
 }
 
 dotenv.config()
+//#endregion
 
-import Routes from './routes/index.js'
-
+//#region Fastify Setup
 const fastify = Fastify({
     logger: true,
 })
+
+fastify.register(fastifySensible)
 
 fastify.register(fastifyMariaDB, {
     host: process.env.DB_HOST!,
@@ -40,8 +46,10 @@ const start = async () => {
         process.exit(1)
     }
 }
+//#endregion
 
 const AISClient = new AISStreamClient(fastify)
+const scraper = new Scraper(fastify)
 
 async function doStartupTasks() {
     console.log('Performing startup tasks...')
@@ -53,6 +61,7 @@ async function doStartupTasks() {
 
     await loadLastPositionsFromDatabase(fastify)
     startHistoricalBatchFlush(fastify)
+    await scraper.getVesselData(9811000)
 
     console.log('Startup tasks completed.')
 }

@@ -27,7 +27,9 @@ export class Scraper {
 	async getVesselData(imo: number): Promise<VesselData> {
 		// Check if the vessel is already being scraped
 		let result = await this.getFromDB(imo)
+
 		if (result) {
+			console.log(chalk.yellow(`Data for IMO ${imo} already exists in DB, returning cached data`))
 			return result
 		}
 
@@ -66,6 +68,7 @@ export class Scraper {
 			yearBuilt: Number(equasisData?.basic_info?.year_built) || null,
 			status: equasisData?.basic_info?.status || null,
 			statusDate: equasisData?.basic_info?.status_date ? new Date(equasisData.basic_info.status_date) : null,
+			lastUpdate: equasisData?.basic_info?.last_update ? new Date(equasisData.basic_info.last_update) : null,
 			hasDnvEntry: !!dnvData,
 			hasEquasisEntry: !!equasisData,
 			dnvData,
@@ -74,6 +77,8 @@ export class Scraper {
 
 		await this.pushToDB(vesselData)
 		//#endregion
+
+		console.log(chalk.green(`Successfully scraped and stored data for IMO ${imo}`))
 
 		return vesselData
 	}
@@ -103,7 +108,7 @@ export class Scraper {
 
 		//#region DB insertion logic
 		const result = await this.fastify.mariadb.query(
-			`INSERT INTO vessels (imo_number, mmsi_number, vessel_name, flag, call_sign, vessel_type, gross_tonnage, dwt, year_built, status, status_date, last_update, has_dnv_entry, has_equasis_entry, dnv_data, equasis_data, last_scraped)
+			`INSERT INTO vessel_data (imo_number, mmsi_number, vessel_name, flag, call_sign, vessel_type, gross_tonnage, dwt, year_built, status, status_date, last_update, has_dnv_entry, has_equasis_entry, dnv_data, equasis_data, last_scraped)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				ON DUPLICATE KEY UPDATE
 					mmsi_number = VALUES(mmsi_number),
@@ -139,7 +144,8 @@ export class Scraper {
 				hasDnvEntry,
 				hasEquasisEntry,
 				dnvData ? JSON.stringify(dnvData) : null,
-				equasisData ? JSON.stringify(equasisData) : null
+				equasisData ? JSON.stringify(equasisData) : null,
+				new Date()
 			]
 		)
 
@@ -148,12 +154,16 @@ export class Scraper {
 	}
 
 	private async getFromDB(imo: number): Promise<VesselData | null> {
-		const [rows] = await this.fastify.mariadb.query(
-			`SELECT * FROM vessels WHERE imo_number = ?`,
+		const rows = await this.fastify.mariadb.query(
+			`SELECT * FROM vessel_data WHERE imo_number = ?`,
 			[imo]
 		)
 
 		if (rows.length === 0) {
+			return null
+		}
+
+		if (rows[0].last_scraped && new Date(rows[0].last_scraped) < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) {
 			return null
 		}
 
@@ -183,11 +193,21 @@ export class Scraper {
 		}
 
 		if (row.dnv_data) {
-			vesselData.dnvData = JSON.parse(row.dnv_data)
+			try {
+				vesselData.dnvData = typeof row.dnv_data === 'string' ? JSON.parse(row.dnv_data) : row.dnv_data
+			} catch (error) {
+				console.error('Error parsing dnv_data from DB for IMO', imo, error)
+				vesselData.dnvData = row.dnv_data
+			}
 		}
 
 		if (row.equasis_data) {
-			vesselData.equasisData = JSON.parse(row.equasis_data)
+			try {
+				vesselData.equasisData = typeof row.equasis_data === 'string' ? JSON.parse(row.equasis_data) : row.equasis_data
+			} catch (error) {
+				console.error('Error parsing equasis_data from DB for IMO', imo, error)
+				vesselData.equasisData = row.equasis_data
+			}
 		}
 
 		return vesselData
@@ -213,6 +233,4 @@ export class Scraper {
 			await new Promise(resolve => setTimeout(resolve, 1000))
 		}
 	}
-
-	
 }

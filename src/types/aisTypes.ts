@@ -1,11 +1,11 @@
 export type VesselPosition = {
     mmsi: string
-    shipName: string | null
-    navigationStatus: number | null
-    rot: number | null
-    sog: number | null
-    cog: number | null
-    trueHeading: number | null
+    vesselName: string | null
+    navigationalStatus: number | null
+    rateOfTurn: number | null
+    speedOverGround: number | null
+    courseOverGround: number | null
+    heading: number | null
     longitude: number | null
     latitude: number | null
     specialManoeuvre: number | null
