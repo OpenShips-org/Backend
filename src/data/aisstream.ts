@@ -1,5 +1,6 @@
 import { dispatchMessage } from '../handler/dispatcher.js'
 import type { FastifyInstance } from 'fastify'
+import chalk from 'chalk'
 
 export class AISStreamClient {
     private ws: WebSocket | null = null
@@ -10,6 +11,9 @@ export class AISStreamClient {
     private readonly maxRetries = 5
     private readonly retryDelay = 5000
 
+    private messageCounter = 0
+    private displayInterval: number = 1000 * 10
+
     constructor(fastify: FastifyInstance) {
         this.fastify = fastify
         this.apiKey = process.env.AISSTREAM_API_KEY || ''
@@ -19,6 +23,8 @@ export class AISStreamClient {
                 'AISSTREAM_API_KEY is not set in environment variables.'
             )
         }
+
+        setInterval(() => this.displayCounter(), this.displayInterval)
     }
 
     async createSocket() {
@@ -63,7 +69,12 @@ export class AISStreamClient {
             }
         }
 
+        
+
         this.ws.onmessage = async (event) => {
+
+            this.messageCounter++
+
             try {
                 let payload: any = event.data
 
@@ -88,5 +99,10 @@ export class AISStreamClient {
                 console.error('Failed to parse WebSocket message:', err)
             }
         }
+    }
+
+    displayCounter() {
+        console.log(chalk.magenta(`Total messages received in the last ${this.displayInterval} ms: ${this.messageCounter}`))
+        this.messageCounter = 0
     }
 }

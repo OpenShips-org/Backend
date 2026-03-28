@@ -62,7 +62,9 @@ export async function loadLastPositionsFromDatabase(fastify: FastifyInstance) {
 
 export function startHistoricalBatchFlush(fastify: FastifyInstance) {
     setInterval(async () => {
-        if (historicalBatch.length === 0) return
+        if (historicalBatch.length === 0) {
+            return
+        }
         const placeholders = historicalBatch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
         const flatValues = historicalBatch.flat()
         try {
@@ -220,17 +222,20 @@ export async function handlePositionReportMessage(
                 shouldInsertHistory = true
             } else {
                 const positionChanged =
-                    lastPosition.longitude !== longitude ||
-                    lastPosition.latitude !== latitude
+                    Math.round(lastPosition.longitude! * 1e3) !== Math.round(longitude * 1e3) ||
+                    Math.round(lastPosition.latitude! * 1e3) !== Math.round(latitude * 1e3)
 
                 const lastTs = lastPosition.timestamp
                     ? new Date(lastPosition.timestamp)
                     : new Date(0)
                 const nowTs = new Date(timestamp)
                 const timeExceeded =
-                    nowTs.getTime() - lastTs.getTime() > 60 * 60 * 1000
+                    nowTs.getTime() - lastTs.getTime() > 60 * 60 * 1000 
 
-                if (positionChanged || timeExceeded) {
+                if (positionChanged) {
+                    shouldInsertHistory = true
+                }
+                if (timeExceeded) {
                     shouldInsertHistory = true
                 }
             }
@@ -257,6 +262,7 @@ export async function handlePositionReportMessage(
                     .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
                     .join(', ')
                 const flatValues = historicalBatch.flat()
+                const flushedCount = historicalBatch.length
                 await fastify.mariadb.query(
                     `
                     INSERT INTO historical_vessel_positions (
@@ -266,10 +272,29 @@ export async function handlePositionReportMessage(
                 `,
                     flatValues
                 )
-                const flushedCount = historicalBatch.length
                 historicalBatch.length = 0
                 console.log(chalk.green(`Flushed ${flushedCount} historical positions to database`))
             }
+
+            //#region Update cache with new position AFTER history logic
+            lastPositionsCache.set(mmsiNumber, {
+                position: {
+                    mmsi: mmsi,
+                    vesselName,
+                    navigationalStatus,
+                    rateOfTurn,
+                    speedOverGround,
+                    courseOverGround,
+                    heading,
+                    longitude,
+                    latitude,
+                    specialManoeuvre,
+                    communicationState,
+                    timestamp,
+                },
+                lastUpdated: Date.now(),
+            })
+            //#endregion
 
         } catch (err) {
             console.error(

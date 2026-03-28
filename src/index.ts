@@ -3,16 +3,26 @@ import fastifyMariaDB from 'fastify-mariadb'
 import fastifySensible from '@fastify/sensible'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUI from '@fastify/swagger-ui'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
 import { loadLastPositionsFromDatabase, startHistoricalBatchFlush } from './handler/PositionReport.js'
 import { Scraper } from './data/scraper/index.js'
 import { AISStreamClient } from './data/aisstream.js'
-import { validateTables } from './utils/db.js'
+
+import { validateTables } from './db/index.js'
+import importPorts from './db/portImporter.js'
 
 import { VesselPositionSchema } from './schemas/vessel.js'
+import { BaseStationPositionScheme } from './schemas/baseStation.js'
+
 import Routes from './routes/index.js'
 
 import * as dotenv from 'dotenv'
+import chalk from 'chalk'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 //#region Config
 declare global {
@@ -71,6 +81,7 @@ fastify.register(fastifySwagger as any, {
         components: {
             schemas: {
                 VesselPosition: VesselPositionSchema,
+                BaseStationPosition: BaseStationPositionScheme,
             },
         }
     },
@@ -122,6 +133,16 @@ async function doStartupTasks() {
 
     await loadLastPositionsFromDatabase(fastify)
     startHistoricalBatchFlush(fastify)
+
+    const portsFilePath = path.join(__dirname, '../public/WPI_Ports.csv')
+    await importPorts(fastify, portsFilePath).then(() => {
+        console.log(chalk.green('Port data import completed.'))
+    }).catch((err) => {
+        console.error(chalk.red('Error importing port data:'), err)
+    })
+
+    scraper.startUpdateOldVesselsInterval()
+    scraper.getVesselData(9271341)
 
     console.log('Startup tasks completed.')
 }
