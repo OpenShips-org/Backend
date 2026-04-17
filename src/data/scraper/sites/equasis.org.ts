@@ -105,6 +105,11 @@ export class EquasisScraper {
             return null
         }
 
+        if (isNaN(Number(imo)) || Number(imo) == 0) {
+            console.log(chalk.yellow('[SCRAPER - EQUASIS] Invalid IMO number provided'))
+            return null
+        }
+
         try {
             const tabUrls: Record<EquasisTab, string> = {
                 ship_info: `${this.baseUrl}/EquasisWeb/restricted/ShipInfo?fs=ShipInfo&P_IMO=${imo}`,

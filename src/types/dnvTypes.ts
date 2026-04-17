@@ -121,7 +121,7 @@ export type Machinery = {
     mainPropulsion: string | null
 }
 
-export type Condition = unknown
+export type Condition = Record<string, unknown>
 
 export type DnvData = {
     identification: Identification | null

@@ -49,9 +49,7 @@ export default function positionRoutes(
         async (request, reply) => {
             const validationResult = await validateBoxParameters(request.query)
             if (!validationResult.valid) {
-                return reply
-                    .status(400)
-                    .send({ error: validationResult.message })
+                return reply.badRequest(validationResult.message)
             }
 
             let query = `
@@ -75,12 +73,10 @@ export default function positionRoutes(
 
             try {
                 const result = await fastify.mariadb.query(query, params)
-                return result.rows as VesselPosition[]
+                return result as VesselPosition[]
             } catch (error) {
                 fastify.log.error(error)
-                throw fastify.httpErrors.internalServerError(
-                    'Failed to retrieve vessel positions'
-                )
+                return reply.internalServerError('Failed to retrieve vessel positions')
             }
         }
     )
@@ -93,7 +89,7 @@ export default function positionRoutes(
                     type: 'object',
                     required: ['mmsi'],
                     properties: {
-                        mmsi: { type: 'string', pattern: '^[0-9]{9}$' },
+                            mmsi: { type: 'integer', minimum: 100000000, maximum: 999999999 },
                     },
                 },
                 response: {
@@ -121,7 +117,7 @@ export default function positionRoutes(
                     [request.params.mmsi]
                 )
 
-                const vessel = result.rows[0] as VesselPosition
+                const vessel = result[0] as VesselPosition
 
                 if (!vessel) {
                     throw fastify.httpErrors.notFound(
@@ -131,9 +127,7 @@ export default function positionRoutes(
                 return vessel
             } catch (error) {
                 fastify.log.error(error)
-                throw fastify.httpErrors.internalServerError(
-                    'Failed to retrieve vessel position'
-                )
+                return reply.internalServerError('Failed to retrieve vessel position')
             }
         }
     )
@@ -146,7 +140,7 @@ export default function positionRoutes(
                     type: 'object',
                     required: ['mmsi'],
                     properties: {
-                        mmsi: { type: 'string', pattern: '^[0-9]{9}$' },
+                            mmsi: { type: 'integer', minimum: 100000000, maximum: 999999999 },
                     },
                 },
                 querystring: {
@@ -184,7 +178,7 @@ export default function positionRoutes(
             const { limit, startTime, endTime, order } = request.query
 
             if (startTime && endTime && new Date(startTime) > new Date(endTime)) {
-                throw fastify.httpErrors.badRequest('startTime must be before endTime')
+                return reply.badRequest('startTime must be before endTime')
             }
 
             let query = `
@@ -214,12 +208,10 @@ export default function positionRoutes(
 
             try {
                 const result = await fastify.mariadb.query(query, params)
-                return result.rows as VesselPosition[]
+                return result as VesselPosition[]
             } catch (error) {
                 fastify.log.error(error)
-                throw fastify.httpErrors.internalServerError(
-                    'Failed to retrieve vessel position history'
-                )
+                return reply.internalServerError('Failed to retrieve vessel position history')
             }
         }
     )

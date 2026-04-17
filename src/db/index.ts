@@ -1,14 +1,14 @@
-export async function validateTables(fastifyMariaDB: any) {
-    const connection = await fastifyMariaDB.getConnection()
+import type { FastifyInstance } from "fastify"
 
+export async function validateTables(fastify: FastifyInstance) {
     try {
-        await connection.query("SET time_zone = '+00:00'")
+        await fastify.mariadb.query("SET time_zone = '+00:00'")
     } catch (err) {
         console.warn('Could not set session time_zone to UTC:', err)
     }
 
     try {
-        await connection.query(`
+        await fastify.mariadb.query(`
             CREATE TABLE IF NOT EXISTS current_vessel_positions (
                 mmsi VARCHAR(20) PRIMARY KEY,
                 vesselName VARCHAR(255) NULL,
@@ -25,7 +25,7 @@ export async function validateTables(fastifyMariaDB: any) {
             )
         `)
 
-        await connection.query(`
+        await fastify.mariadb.query(`
             CREATE TABLE IF NOT EXISTS historical_vessel_positions (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 mmsi VARCHAR(20) NOT NULL,
@@ -45,7 +45,7 @@ export async function validateTables(fastifyMariaDB: any) {
             )
         `)
 
-        await connection.query(`
+        await fastify.mariadb.query(`
             CREATE TABLE IF NOT EXISTS static_ship_data (
                 mmsi VARCHAR(20) PRIMARY KEY,
                 imo VARCHAR(20) NULL,
@@ -63,7 +63,7 @@ export async function validateTables(fastifyMariaDB: any) {
             )
         `)
 
-        await connection.query(`
+        await fastify.mariadb.query(`
             CREATE TABLE IF NOT EXISTS base_stations (
                 mmsi VARCHAR(20) PRIMARY KEY,
                 latitude DOUBLE NULL,
@@ -74,7 +74,7 @@ export async function validateTables(fastifyMariaDB: any) {
             )
         `)
 
-        await connection.query(`
+        await fastify.mariadb.query(`
             CREATE TABLE IF NOT EXISTS vessel_data (
                 imo_number INT PRIMARY KEY,
                 mmsi_number BIGINT NULL,
@@ -96,7 +96,7 @@ export async function validateTables(fastifyMariaDB: any) {
             )
         `)
 
-        await connection.query(`
+        await fastify.mariadb.query(`
             CREATE TABLE IF NOT EXISTS ports (
                 world_port_index_number INT PRIMARY KEY,
                 region_name VARCHAR(255),
@@ -216,7 +216,5 @@ export async function validateTables(fastifyMariaDB: any) {
     } catch (err) {
         console.error('Error validating tables:', err)
         throw err
-    } finally {
-        connection.release()
     }
 }

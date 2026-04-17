@@ -16,3 +16,7 @@ export type HistoryQuery = {
     endTime?: string
     order?: 'asc' | 'desc'
 }
+
+export type VesselStaticInfoQuery = {
+    scrapedData?: boolean
+}

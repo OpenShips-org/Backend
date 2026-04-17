@@ -52,9 +52,7 @@ export default function baseStationRoutes(
         async (request, reply) => {
             const validationResult = await validateBoxParameters(request.query)
             if (!validationResult.valid) {
-                throw fastify.httpErrors.badRequest(
-                    validationResult.message || 'Invalid box parameters'
-                )
+                return reply.badRequest(validationResult.message)
             }
 
             let query = `
@@ -81,9 +79,7 @@ export default function baseStationRoutes(
                 return baseStations as BaseStationPosition[]
             } catch (error) {
                 fastify.log.error(error, 'Error fetching base stations')
-                throw fastify.httpErrors.internalServerError(
-                    'Failed to fetch base stations'
-                )
+                return reply.internalServerError('Failed to fetch base stations')
             }
         }
     )
@@ -131,14 +127,12 @@ export default function baseStationRoutes(
                 )
 
                 if (baseStation.length === 0) {
-                    throw fastify.httpErrors.notFound('Base station not found')
+                    return reply.notFound('Base station not found')
                 }
 
                 return baseStation[0] as BaseStationPosition
             } catch (error) {
-                throw fastify.httpErrors.internalServerError(
-                    'Failed to retrieve base station information'
-                )
+                return reply.internalServerError('Failed to retrieve base station information')
             }
         }
     )

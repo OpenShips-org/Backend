@@ -30,6 +30,11 @@ declare global {
 }
 
 dotenv.config()
+
+const parsedPort = Number(process.env.PORT)
+const PORT = Number.isInteger(parsedPort) && parsedPort >= 0 && parsedPort < 65536
+    ? parsedPort
+    : 3000
 //#endregion
 
 //#region Fastify Setup
@@ -47,10 +52,10 @@ fastify.register(fastifySwagger as any, {
             version: '1.0.0',
         },
         basePath: '/v1',
-        host: `localhost:${process.env.PORT ?? 3000}`,
+        host: `localhost:${PORT}`,
         servers: [
             {
-                url: `http://localhost:${process.env.PORT ?? 3000}/v1`,
+                url: `http://localhost:${PORT}/v1`,
                 description: 'Local development server',
                 protocol: 'http',
                 security: [],
@@ -58,7 +63,7 @@ fastify.register(fastifySwagger as any, {
             },
             {
                 url: `https://api.openships.de/v1`,
-                description: 'Production server (Temporary .de domain)',
+                description: 'Production server',
                 protocol: 'https',
                 security: [],
                 schemes: ['https'],
@@ -105,14 +110,18 @@ fastify.register(fastifyMariaDB, {
     timezone: 'Z',
 })
 
+const AISClient = new AISStreamClient(fastify)
+const scraper = new Scraper(fastify)
+
+fastify.decorate('scraper', scraper)
+
 fastify.register(Routes, { prefix: '/v1' })
 
 const start = async () => {
     try {
         await doStartupTasks()
-        const port = Number(process.env.PORT ?? 3000)
-        await fastify.listen({ port })
-        console.log(`Server is running on http://localhost:${port}`)
+        await fastify.listen({ port: PORT, host: '0.0.0.0' })
+        console.log(`Server is running on http://localhost:${PORT}`)
     } catch (err) {
         fastify.log.error(err)
         process.exit(1)
@@ -120,15 +129,12 @@ const start = async () => {
 }
 //#endregion
 
-const AISClient = new AISStreamClient(fastify)
-const scraper = new Scraper(fastify)
-
 async function doStartupTasks() {
     console.log('Performing startup tasks...')
 
     await fastify.ready()
 
-    await validateTables(fastify.mariadb)
+    await validateTables(fastify)
     await AISClient.createSocket()
 
     await loadLastPositionsFromDatabase(fastify)
@@ -142,7 +148,6 @@ async function doStartupTasks() {
     })
 
     scraper.startUpdateOldVesselsInterval()
-    scraper.getVesselData(9271341)
 
     console.log('Startup tasks completed.')
 }

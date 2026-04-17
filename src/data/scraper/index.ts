@@ -5,10 +5,33 @@ import type { VesselData } from '../../types/scraperTypes.js'
 import type { FastifyInstance } from 'fastify'
 import chalk from 'chalk'
 
+export type QueueRequestResult =
+    | {
+          status: 'cached'
+          data: VesselData
+      }
+    | {
+          status: 'queued'
+          imo: number
+          queuePosition: number
+      }
+
 export class Scraper {
     private equasisScraper: EquasisScraper
     private dnvScraper: DnvScraper
     private fastify: FastifyInstance
+
+    private scrapingQueue: number[] = []
+    private queuedImos: Set<number> = new Set()
+    private pendingScrapes: Map<
+        number,
+        {
+            promise: Promise<VesselData>
+            resolve: (value: VesselData) => void
+            reject: (reason?: unknown) => void
+        }
+    > = new Map()
+    private isProcessingQueue = false
 
     constructor(fastify: FastifyInstance) {
         if (!process.env.EQUASIS_USERNAME || !process.env.EQUASIS_PASSWORD) {
@@ -38,7 +61,16 @@ export class Scraper {
     }
 
     async getVesselData(imo: number): Promise<VesselData> {
-        // Check if the vessel is already being scraped
+        const inFlightScrape = this.pendingScrapes.get(imo)
+        if (inFlightScrape) {
+            console.log(
+                chalk.yellow(
+                    `Data for IMO ${imo} is already being scraped, waiting for result`
+                )
+            )
+            return inFlightScrape.promise
+        }
+
         let result = await this.getFromDB(imo)
 
         const lastScraped = await this.getLastScrapedFromDB(imo)
@@ -53,17 +85,120 @@ export class Scraper {
             return result
         }
 
-        try {
-            result = await this.fetchVesselData(imo)
-            return result
-        } catch (error) {
-            console.error(
-                chalk.red(`Error fetching vessel data for IMO ${imo}:`),
-                error
-            )
+        return this.enqueueScrape(imo)
+    }
 
-			throw error
+    async requestVesselData(imo: number): Promise<QueueRequestResult> {
+        const inFlightScrape = this.pendingScrapes.get(imo)
+        if (inFlightScrape) {
+            return {
+                status: 'queued',
+                imo,
+                queuePosition: this.getQueuePositionForImo(imo),
+            }
         }
+
+        const result = await this.getFromDB(imo)
+        const lastScraped = await this.getLastScrapedFromDB(imo)
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+        if (result && lastScraped && lastScraped > sevenDaysAgo) {
+            return {
+                status: 'cached',
+                data: result,
+            }
+        }
+
+        this.enqueueScrape(imo)
+
+        return {
+            status: 'queued',
+            imo,
+            queuePosition: this.getQueuePositionForImo(imo),
+        }
+    }
+
+    getQueuePositionForImo(imo: number): number {
+        const queueIndex = this.scrapingQueue.indexOf(imo)
+        if (queueIndex >= 0) {
+            return queueIndex + 1
+        }
+
+        if (this.pendingScrapes.has(imo)) {
+            // 0 means this IMO is currently being scraped, not waiting in queue.
+            return 0
+        }
+
+        return -1
+    }
+
+    private enqueueScrape(imo: number): Promise<VesselData> {
+        const existing = this.pendingScrapes.get(imo)
+        if (existing) {
+            return existing.promise
+        }
+
+        let resolvePromise!: (value: VesselData) => void
+        let rejectPromise!: (reason?: unknown) => void
+
+        const promise = new Promise<VesselData>((resolve, reject) => {
+            resolvePromise = resolve
+            rejectPromise = reject
+        })
+
+        this.pendingScrapes.set(imo, {
+            promise,
+            resolve: resolvePromise,
+            reject: rejectPromise,
+        })
+
+        if (!this.queuedImos.has(imo)) {
+            this.scrapingQueue.push(imo)
+            this.queuedImos.add(imo)
+        }
+
+        this.processQueue().catch((error) =>
+            console.error(chalk.red('Unexpected scrape queue error:'), error)
+        )
+
+        return promise
+    }
+
+    private async processQueue() {
+        if (this.isProcessingQueue) {
+            return
+        }
+
+        this.isProcessingQueue = true
+
+        while (this.scrapingQueue.length > 0) {
+            const imo = this.scrapingQueue.shift()
+            if (imo === undefined) {
+                continue
+            }
+
+            this.queuedImos.delete(imo)
+            const pendingScrape = this.pendingScrapes.get(imo)
+
+            if (!pendingScrape) {
+                continue
+            }
+
+            try {
+                const vesselData = await this.fetchVesselData(imo)
+                pendingScrape.resolve(vesselData)
+            } catch (error) {
+                console.error(
+                    chalk.red(`Error fetching vessel data for IMO ${imo}:`),
+                    error
+                )
+                pendingScrape.reject(error)
+            } finally {
+                this.pendingScrapes.delete(imo)
+            }
+        }
+
+        this.isProcessingQueue = false
     }
 
     private async fetchVesselData(imo: number): Promise<VesselData> {

@@ -1,6 +1,7 @@
 import { dispatchMessage } from '../handler/dispatcher.js'
 import type { FastifyInstance } from 'fastify'
 import chalk from 'chalk'
+import WebSocket from 'ws'
 
 export class AISStreamClient {
     private ws: WebSocket | null = null
@@ -33,72 +34,71 @@ export class AISStreamClient {
         }
         this.ws = new WebSocket(this.url)
 
-        this.ws.onopen = () => {
+        this.ws.on('open', () => {
             console.log('WebSocket connection opened.')
 
             const subscriptionMessage = {
-                APIkey: this.apiKey,
+                APIKey: this.apiKey,
+                Apikey: this.apiKey,
                 BoundingBoxes: [
                     [
-                        [-180, -90],
-                        [180, 90],
+                        [-90, -180],
+                        [90, 180],
                     ],
+                ],
+                FilterMessageTypes: [
+                    'PositionReport',
+                    'ShipStaticData',
+                    'BaseStationReport',
                 ],
             }
 
             this.ws?.send(JSON.stringify(subscriptionMessage))
+            console.log('Sent AISStream subscription message.')
 
             this.reconnectAttempts = 0
-        }
+        })
 
-        this.ws.onerror = (error) => {
+        this.ws.on('error', (error) => {
             console.error('WebSocket error:', error)
-        }
+        })
 
-        this.ws.onclose = () => {
-            console.log('WebSocket connection closed.')
+        this.ws.on('close', (code, reasonBuffer) => {
+            const reason = reasonBuffer.toString() || 'no reason provided'
+            console.log(
+                `WebSocket connection closed (code: ${code}, reason: ${reason}).`
+            )
 
             if (this.reconnectAttempts < this.maxRetries) {
-                const delay =
-                    this.retryDelay * Math.pow(2, this.reconnectAttempts - 1)
+                const delay = this.retryDelay * Math.pow(2, this.reconnectAttempts)
                 setTimeout(() => this.createSocket(), delay)
                 console.log(
                     `Reconnecting WebSocket... attempt ${this.reconnectAttempts + 1}`
                 )
                 this.reconnectAttempts++
             }
-        }
+        })
 
-        
-
-        this.ws.onmessage = async (event) => {
+        this.ws.on('message', async (rawData) => {
 
             this.messageCounter++
 
             try {
-                let payload: any = event.data
-
-                if (typeof payload !== 'string') {
-                    if (
-                        typeof Blob !== 'undefined' &&
-                        payload instanceof Blob
-                    ) {
-                        payload = await payload.text()
-                    } else if (payload instanceof ArrayBuffer) {
-                        payload = new TextDecoder().decode(
-                            new Uint8Array(payload)
-                        )
-                    } else {
-                        payload = String(payload)
-                    }
-                }
+                const payload =
+                    typeof rawData === 'string' ? rawData : rawData.toString()
 
                 const msg = JSON.parse(payload)
+
+                if (msg?.error) {
+                    console.error('AISStream subscription/server error:', msg.error)
+                    return
+                }
+
                 await dispatchMessage(msg, this.fastify)
             } catch (err) {
                 console.error('Failed to parse WebSocket message:', err)
             }
-        }
+        })
     }
 
     displayCounter() {
