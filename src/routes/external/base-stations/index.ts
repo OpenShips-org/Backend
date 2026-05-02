@@ -29,22 +29,8 @@ export default function baseStationRoutes(
                         type: 'array',
                         items: BaseStationPositionScheme,
                     },
-                        400: {
-                            type: 'object',
-                            properties: {
-                                statusCode: { type: 'integer', example: 400 },
-                                error: { type: 'string', example: 'Bad Request' },
-                                message: { type: 'string', example: 'Invalid box parameters' },
-                            },
-                        },
-                        500: {
-                            type: 'object',
-                            properties: {
-                                statusCode: { type: 'integer', example: 500 },
-                                error: { type: 'string', example: 'Internal Server Error' },
-                                message: { type: 'string', example: 'Failed to fetch base stations' },
-                            },
-                        },
+                        400: { $ref: 'HttpError' },
+                        500: { $ref: 'HttpError' },
                 },
                 tags: ['Base Stations'],
             },
@@ -97,22 +83,8 @@ export default function baseStationRoutes(
                 },
                 response: {
                     200: BaseStationPositionScheme,
-                    404: {
-                        type: 'object',
-                        properties: {
-                            statusCode: { type: 'integer', example: 404 },
-                            error: { type: 'string', example: 'Not Found' },
-                            message: { type: 'string', example: 'Base station not found' },
-                        },
-                    },
-                    500: {
-                        type: 'object',
-                        properties: {
-                            statusCode: { type: 'integer', example: 500 },
-                            error: { type: 'string', example: 'Internal Server Error' },
-                            message: { type: 'string', example: 'Failed to retrieve base station information' },
-                        },
-                    },
+                    404: { $ref: 'HttpError' },
+                    500: { $ref: 'HttpError' },
                 },
                 tags: ['Base Stations'],
             },

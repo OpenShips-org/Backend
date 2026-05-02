@@ -13,6 +13,10 @@ export type VesselPosition = {
     timestamp: string | null
 }
 
+export type VesselPositionWithType = VesselPosition & {
+    aisType: number | null
+}
+
 export type BaseStationPosition = {
     mmsi: string
     longitude: number | null

@@ -15,6 +15,14 @@ export const VesselPositionSchema = Type.Object({
     timestamp: Type.String({ format: 'date-time', examples: ['2024-06-01T12:00:00Z'] })
 })
 
+export const VesselPositionSchemaWithType = Type.Object({
+    ...VesselPositionSchema.properties,
+    aisType: Type.Union([
+        Type.Number({ examples: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] }),
+        Type.Null(),
+    ])
+})
+
 export const VesselStaticSchema = Type.Object({
     mmsi: Type.Number({ examples: [205227090, 205585190, 205491290, 209410000] }),
     vesselName: Type.String({ examples: ['DONAU', 'PRESTIGE', 'RIVER DRONE 2', 'SANTIAGO'] }),

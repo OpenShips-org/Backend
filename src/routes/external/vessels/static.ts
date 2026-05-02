@@ -69,30 +69,9 @@ export default function staticRoutes(
                 },
                 response: {
                     200: VesselStaticSchema,
-                    400: {
-                        type: 'object',
-                        properties: {
-                                statusCode: { type: 'integer', example: 400 },
-                                error: { type: 'string', example: 'Bad Request' },
-                                message: { type: 'string', example: 'Invalid MMSI or query parameters' },
-                        },
-                    },
-                    404: {
-                        type: 'object',
-                        properties: {
-                                statusCode: { type: 'integer', example: 404 },
-                                error: { type: 'string', example: 'Not Found' },
-                                message: { type: 'string', example: 'Vessel with the specified MMSI not found' },
-                        },
-                    },
-                    500: {
-                        type: 'object',
-                        properties: {
-                                statusCode: { type: 'integer', example: 500 },
-                                error: { type: 'string', example: 'Internal Server Error' },
-                                message: { type: 'string', example: 'An error occurred while fetching vessel data' },
-                        },
-                    },
+                    400: { $ref: 'HttpError' },
+                    404: { $ref: 'HttpError' },
+                    500: { $ref: 'HttpError' },
                 },
                 tags: ['Vessels'],
             },
@@ -155,6 +134,64 @@ export default function staticRoutes(
                 fastify.log.error(error)
                 return reply.internalServerError(
                     'An error occurred while fetching vessel data'
+                )
+            }
+        }
+    )
+
+    fastify.get<{ Params: MMSIParam }>(
+        '/:mmsi/vessel-type',
+        {
+            schema: {
+                params: {
+                    type: 'object',
+                    required: ['mmsi'],
+                    properties: {
+                        mmsi: {
+                            type: 'integer',
+                            minimum: 0,
+                            maximum: 999999999,
+                        },
+                    },
+                },
+                response: {
+                    200: {
+                        type: 'object',
+                        properties: {
+                            mmsi: { type: 'integer' },
+                            vesselType: { type: 'string' },
+                        },
+                    },
+                    400: { $ref: 'HttpError' },
+                    404: { $ref: 'HttpError' },
+                    500: { $ref: 'HttpError' },
+                },
+                tags: ['Vessels'],
+            },
+        },
+        async (request, reply) => {
+            const mmsi = request.params.mmsi
+
+            try {
+                const rows = await fastify.mariadb.query(
+                    'SELECT vesselType FROM static_ship_data WHERE mmsi = ?',
+                    [mmsi]
+                )
+
+                if (!rows || rows.length === 0) {
+                    return reply.notFound(
+                        'Vessel with the specified MMSI not found'
+                    )
+                }
+
+                return {
+                    mmsi,
+                    vesselType: rows[0].vesselType,
+                }
+            } catch (error) {
+                fastify.log.error(error)
+                return reply.internalServerError(
+                    'An error occurred while fetching vessel type'
                 )
             }
         }

@@ -6,6 +6,15 @@ export type PositionBoxQuery = {
     limit?: number
 }
 
+export type VesselBoxQuery = {
+    minLat: number
+    maxLat: number
+    minLon: number
+    maxLon: number
+    limit?: number
+    filterAisTypes?: number[]
+}
+
 export type MMSIParam = {
     mmsi: number
 }

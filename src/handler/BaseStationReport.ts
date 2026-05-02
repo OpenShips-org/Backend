@@ -2,6 +2,39 @@ import { parseAisStreamTimestamp, parseDateForDatabase } from '../utils/dateUtil
 import type { FastifyInstance } from 'fastify'
 import chalk from 'chalk';
 
+const baseStationBatch: any[] = []
+const baseStationBatchSize = 500
+
+async function flushBaseStationBatch(fastify: FastifyInstance) {
+    if (baseStationBatch.length === 0) return
+    const placeholders = baseStationBatch.map(() => '(?, ?, ?, ?, ?, ?)').join(', ')
+    const flatValues = baseStationBatch.flat()
+    try {
+        await fastify.mariadb.query(
+            `
+            INSERT INTO base_stations (mmsi, latitude, longitude, longRangeEnabled, communicationState, timestamp)
+            VALUES ${placeholders}
+            ON DUPLICATE KEY UPDATE
+                latitude = VALUES(latitude),
+                longitude = VALUES(longitude),
+                longRangeEnabled = VALUES(longRangeEnabled),
+                communicationState = VALUES(communicationState),
+                timestamp = VALUES(timestamp)
+        `,
+            flatValues
+        )
+        const flushed = baseStationBatch.length
+        baseStationBatch.length = 0
+        console.log(chalk.green(`Flushed ${flushed} base station records to database`))
+    } catch (err) {
+        console.error(chalk.red('Error flushing base station batch:'), err)
+    }
+}
+
+export function startBaseStationBatchFlush(fastify: FastifyInstance) {
+    setInterval(() => flushBaseStationBatch(fastify), 15 * 1000)
+}
+
 export async function handleBaseStationReportMessage(
     msg: any,
     fastify: FastifyInstance
@@ -45,17 +78,11 @@ export async function handleBaseStationReportMessage(
         const communicationState = baseStationReport.CommunicationState;
         //#endregion
 
-        //#region Database update
-        const result = await fastify.mariadb.query(`
-            INSERT INTO base_stations (mmsi, latitude, longitude, longRangeEnabled, communicationState, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                latitude = VALUES(latitude),
-                longitude = VALUES(longitude),
-                longRangeEnabled = VALUES(longRangeEnabled),
-                communicationState = VALUES(communicationState),
-                timestamp = VALUES(timestamp)
-        `, [mmsi, latitude, longitude, longRangeEnabled, communicationState, timestamp])
+        //#region Database update (queued)
+        baseStationBatch.push([mmsi, latitude, longitude, longRangeEnabled, communicationState, timestamp])
+        if (baseStationBatch.length >= baseStationBatchSize) {
+            await flushBaseStationBatch(fastify)
+        }
         //#endregion
 
     } catch (err) {

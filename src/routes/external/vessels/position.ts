@@ -1,16 +1,16 @@
 import type { FastifyInstance } from 'fastify'
 import type { FastifyPluginOptions } from 'fastify'
 
-import type { PositionBoxQuery, MMSIParam, HistoryQuery } from '../types.js'
+import type { VesselBoxQuery, MMSIParam, HistoryQuery } from '../types.js'
 import { validateBoxParameters } from '../utils.js'
-import type { VesselPosition } from '../../../types/aisTypes.js'
-import { VesselPositionSchema } from '../../../schemas/vessel.js'
+import type { VesselPosition, VesselPositionWithType } from '../../../types/aisTypes.js'
+import { VesselPositionSchema, VesselPositionSchemaWithType } from '../../../schemas/vessel.js'
 
 export default function positionRoutes(
     fastify: FastifyInstance,
     options: FastifyPluginOptions
 ) {
-    fastify.get<{ Querystring: PositionBoxQuery }>(
+    fastify.get<{ Querystring: VesselBoxQuery }>(
         '/box',
         {
             schema: {
@@ -22,26 +22,21 @@ export default function positionRoutes(
                         maxLat: { type: 'number', minimum: -90, maximum: 90 },
                         minLon: { type: 'number', minimum: -180, maximum: 180 },
                         maxLon: { type: 'number', minimum: -180, maximum: 180 },
-                        limit: { type: 'integer', minimum: 1, maximum: 1000 },
+                        limit: { type: 'integer', minimum: 1, maximum: 100000 },
+                        filterAisTypes: {
+                            type: 'array',
+                            items: { type: 'integer', minimum: 0, maximum: 99 },
+                            uniqueItems: true,
+                        },
                     },
                 },
                 response: {
                     200: {
                         type: 'array',
-                        items: VesselPositionSchema,
+                        items: VesselPositionSchemaWithType,
                     },
-                    400: {
-                        type: 'object',
-                        properties: {
-                            error: { type: 'string' },
-                        },
-                    },
-                    500: {
-                        type: 'object',
-                        properties: {
-                            error: { type: 'string' },
-                        },
-                    },
+                    400: { $ref: 'HttpError' },
+                    500: { $ref: 'HttpError' },
                 },
                 tags: ['Vessels'],
             },
@@ -53,10 +48,11 @@ export default function positionRoutes(
             }
 
             let query = `
-    SELECT *
-    FROM vessel_positions
-    WHERE latitude BETWEEN ? AND ?
-      AND longitude BETWEEN ? AND ?
+        SELECT vp.*, s.vesselType AS aisType
+        FROM current_vessel_positions vp
+        LEFT JOIN static_ship_data s ON s.mmsi = vp.mmsi
+        WHERE vp.latitude BETWEEN ? AND ?
+            AND vp.longitude BETWEEN ? AND ?
 `
 
             const params = [
@@ -66,14 +62,21 @@ export default function positionRoutes(
                 request.query.maxLon,
             ]
 
-            if (request.query.limit) {
-                query += ' LIMIT ?'
-                params.push(request.query.limit)
-            }
-
             try {
+                if (request.query.filterAisTypes && request.query.filterAisTypes.length > 0) {
+                    query += `
+      AND s.vesselType IN (${request.query.filterAisTypes.map(() => '?').join(',')})
+`
+                    params.push(...request.query.filterAisTypes)
+                }
+
+                if (request.query.limit) {
+                    query += ' LIMIT ?'
+                    params.push(request.query.limit)
+                }
+
                 const result = await fastify.mariadb.query(query, params)
-                return result as VesselPosition[]
+                return result as VesselPositionWithType[]
             } catch (error) {
                 fastify.log.error(error)
                 return reply.internalServerError('Failed to retrieve vessel positions')
@@ -94,18 +97,9 @@ export default function positionRoutes(
                 },
                 response: {
                     200: VesselPositionSchema,
-                    404: {
-                        type: 'object',
-                        properties: {
-                            error: { type: 'string' },
-                        },
-                    },
-                    500: {
-                        type: 'object',
-                        properties: {
-                            error: { type: 'string' },
-                        },
-                    },
+                    400: { $ref: 'HttpError' },
+                    404: { $ref: 'HttpError' },
+                    500: { $ref: 'HttpError' },
                 },
                 tags: ['Vessels'],
             },
@@ -157,18 +151,9 @@ export default function positionRoutes(
                         type: 'array',
                         items: VesselPositionSchema,
                     },
-                    400: {
-                        type: 'object',
-                        properties: {
-                            error: { type: 'string' },
-                        },
-                    },
-                    500: {
-                        type: 'object',
-                        properties: {
-                            error: { type: 'string' },
-                        },
-                    },
+                    400: { $ref: 'HttpError' },
+                    404: { $ref: 'HttpError' },
+                    500: { $ref: 'HttpError' },
                 },
                 tags: ['Vessels'],
             },

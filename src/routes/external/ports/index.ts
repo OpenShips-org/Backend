@@ -29,12 +29,8 @@ export default function portRoutes(
                         type: 'array',
                         items: PortPositionSchema,
                     },
-                    400: {
-                        type: 'object',
-                        properties: {
-                            error: { type: 'string' },
-                        },
-                    },
+                    400: { $ref: 'HttpError' },
+                    500: { $ref: 'HttpError' },
                 },
                 tags: ['Ports'],
             },

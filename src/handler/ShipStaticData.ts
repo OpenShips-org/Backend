@@ -2,6 +2,46 @@ import { parseAisStreamTimestamp, parseDateForDatabase } from '../utils/dateUtil
 import type { FastifyInstance } from 'fastify'
 import chalk from 'chalk';
 
+const staticShipBatch: any[] = []
+const staticShipBatchSize = 500
+
+async function flushStaticShipBatch(fastify: FastifyInstance) {
+    if (staticShipBatch.length === 0) return
+    const placeholders = staticShipBatch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
+    const flatValues = staticShipBatch.flat()
+    try {
+        await fastify.mariadb.query(
+            `
+            INSERT INTO static_ship_data (mmsi, imo, callSign, vesselName, destination, vesselType, maxDraught, dimensionA, dimensionB, dimensionC, dimensionD, eta, timestamp)
+            VALUES ${placeholders}
+            ON DUPLICATE KEY UPDATE
+                imo = VALUES(imo),
+                callSign = VALUES(callSign),
+                vesselName = VALUES(vesselName),
+                destination = VALUES(destination),
+                vesselType = VALUES(vesselType),
+                maxDraught = VALUES(maxDraught),
+                dimensionA = VALUES(dimensionA),
+                dimensionB = VALUES(dimensionB),
+                dimensionC = VALUES(dimensionC),
+                dimensionD = VALUES(dimensionD),
+                eta = VALUES(eta),
+                timestamp = VALUES(timestamp)
+        `,
+            flatValues
+        )
+        const flushed = staticShipBatch.length
+        staticShipBatch.length = 0
+        console.log(chalk.green(`Flushed ${flushed} static ship records to database`))
+    } catch (err) {
+        console.error(chalk.red('Error flushing static ship batch:'), err)
+    }
+}
+
+export function startStaticShipBatchFlush(fastify: FastifyInstance) {
+    setInterval(() => flushStaticShipBatch(fastify), 15 * 1000)
+}
+
 export async function handleShipStaticDataMessage(
     msg: any,
     fastify: FastifyInstance
@@ -87,38 +127,24 @@ export async function handleShipStaticDataMessage(
         }
         //#endregion
 
-        //#region Database update
-        const result = await fastify.mariadb.query(
-            'INSERT INTO static_ship_data (mmsi, imo, callSign, vesselName, destination, vesselType, maxDraught, dimensionA, dimensionB, dimensionC, dimensionD, eta, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE imo = VALUES(imo), callSign = VALUES(callSign), vesselName = VALUES(vesselName), destination = VALUES(destination), vesselType = VALUES(vesselType), maxDraught = VALUES(maxDraught), dimensionA = VALUES(dimensionA), dimensionB = VALUES(dimensionB), dimensionC = VALUES(dimensionC), dimensionD = VALUES(dimensionD), eta = VALUES(eta), timestamp = VALUES(timestamp)',
-            [
-                mmsi,
-                imo,
-                callSign,
-                vesselName,
-                destination,
-                vesselType,
-                maxDraught,
-                dimensionA,
-                dimensionB,
-                dimensionC,
-                dimensionD,
-                finalEta,
-                timestamp
-            ]
-        )
-
-        if (result.affectedRows === 1) {
-            //console.log(chalk.yellow(
-            //    `Inserted static ship data for MMSI ${mmsi} into static_ship_data.`
-            //))
-        } else if (result.affectedRows === 2) {
-            //console.log(chalk.yellow(
-            //    `Updated static ship data for MMSI ${mmsi} in static_ship_data.`
-            //))
-        } else {
-            console.warn(chalk.red(
-                `Unexpected result when inserting/updating static ship data for MMSI ${mmsi}: affectedRows = ${result.affectedRows}`
-            ))
+        //#region Database update (queued)
+        staticShipBatch.push([
+            mmsi,
+            imo,
+            callSign,
+            vesselName,
+            destination,
+            vesselType,
+            maxDraught,
+            dimensionA,
+            dimensionB,
+            dimensionC,
+            dimensionD,
+            finalEta,
+            timestamp,
+        ])
+        if (staticShipBatch.length >= staticShipBatchSize) {
+            await flushStaticShipBatch(fastify)
         }
         //#endregion
     } catch (err) {

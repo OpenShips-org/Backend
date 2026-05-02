@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type { FastifyPluginOptions } from 'fastify'
+import { messageCounters } from '../handler/dispatcher.js'
 
 import internalRoutes from './internal/index.js'
 import externalRoutes from './external/index.js'
@@ -13,5 +14,12 @@ export default function Routes(
 
     fastify.get('/', {schema: {hide: true}}, async (request, reply) => {
         return {}
+    })
+
+    fastify.get('/health', {schema: {hide: true}}, async (request, reply) => {
+        return { 
+            status: 'ok',
+            messageCounters: messageCounters
+        }
     })
 }

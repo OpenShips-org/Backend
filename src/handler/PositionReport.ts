@@ -14,19 +14,18 @@ type CachedPosition = {
 const lastPositionsCache = new Map<number, CachedPosition>()
 const historicalBatch: any[] = []
 
-const batchSize = 500
+// Increase batch size to reduce DB round-trips
+const batchSize = 1000
 
-setInterval(
-    () => {
-        const now = Date.now()
-        for (const [mmsi, cached] of lastPositionsCache.entries()) {
-            if (now - cached.lastUpdated > 5 * 60 * 1000) {
-                lastPositionsCache.delete(mmsi)
-            }
+// Reduce cleanup frequency to lower CPU usage
+setInterval(() => {
+    const now = Date.now()
+    for (const [mmsi, cached] of lastPositionsCache.entries()) {
+        if (now - cached.lastUpdated > 5 * 60 * 1000) {
+            lastPositionsCache.delete(mmsi)
         }
-    },
-    60 * 1000
-)
+    }
+}, 5 * 60 * 1000)
 
 export async function loadLastPositionsFromDatabase(fastify: FastifyInstance) {
     try {
@@ -61,10 +60,9 @@ export async function loadLastPositionsFromDatabase(fastify: FastifyInstance) {
 }
 
 export function startHistoricalBatchFlush(fastify: FastifyInstance) {
+    // Flush less often to reduce CPU/DB contention
     setInterval(async () => {
-        if (historicalBatch.length === 0) {
-            return
-        }
+        if (historicalBatch.length === 0) return
         const placeholders = historicalBatch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
         const flatValues = historicalBatch.flat()
         try {
@@ -83,7 +81,7 @@ export function startHistoricalBatchFlush(fastify: FastifyInstance) {
         } catch (err) {
             console.error(chalk.red('Error flushing historical batch:'), err)
         }
-    }, 5000)
+    }, 15 * 1000)
 }
 
 export async function handlePositionReportMessage(
@@ -146,98 +144,67 @@ export async function handlePositionReportMessage(
         }
         //#endregion
 
-        //#region Current Position Database update
-        const currentResult = await fastify.mariadb.query(
-            `
-            INSERT INTO current_vessel_positions (
-                mmsi, vesselName, navigationalStatus, rateOfTurn, speedOverGround, courseOverGround, heading,
-                longitude, latitude, specialManoeuvre, communicationState, timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                vesselName = VALUES(vesselName),
-                navigationalStatus = VALUES(navigationalStatus),
-                rateOfTurn = VALUES(rateOfTurn),
-                speedOverGround = VALUES(speedOverGround),
-                courseOverGround = VALUES(courseOverGround),
-                heading = VALUES(heading),
-                longitude = VALUES(longitude),
-                latitude = VALUES(latitude),
-                specialManoeuvre = VALUES(specialManoeuvre),
-                communicationState = VALUES(communicationState),
-                timestamp = VALUES(timestamp)
-        `,
-            [
-                mmsi,
-                vesselName,
-                navigationalStatus,
-                rateOfTurn,
-                speedOverGround,
-                courseOverGround,
-                heading,
-                longitude,
-                latitude,
-                specialManoeuvre,
-                communicationState,
-                timestamp,
-            ]
-        )
+        //#region Optimize: avoid unnecessary DB writes
+
+        // Try to get cached position; if missing, load from DB once
+        let cached = lastPositionsCache.get(mmsiNumber)
+        if (!cached) {
+            const [dbResult] = await fastify.mariadb.query(
+                'SELECT * FROM current_vessel_positions WHERE mmsi = ?',
+                [mmsi]
+            )
+            if (dbResult) {
+                cached = {
+                    position: {
+                        mmsi: dbResult.mmsi,
+                        vesselName: dbResult.vessel_name,
+                        navigationalStatus: dbResult.navigational_status,
+                        rateOfTurn: dbResult.rate_of_turn,
+                        speedOverGround: dbResult.speed_over_ground,
+                        courseOverGround: dbResult.course_over_ground,
+                        heading: dbResult.heading,
+                        longitude: dbResult.longitude,
+                        latitude: dbResult.latitude,
+                        specialManoeuvre: dbResult.special_manoeuvre,
+                        communicationState: dbResult.communication_state,
+                        timestamp: dbResult.timestamp,
+                    },
+                    lastUpdated: Date.now(),
+                }
+                lastPositionsCache.set(mmsiNumber, cached)
+            }
+        }
+
+        const lastPosition = cached ? cached.position : null
+
+        // If the incoming timestamp is not newer than the last known position, skip DB work
+        const incomingTs = new Date(timestamp).getTime()
+        const lastTs = lastPosition && lastPosition.timestamp ? new Date(lastPosition.timestamp).getTime() : 0
+        if (incomingTs <= lastTs) {
+            // Update cache lastUpdated so we don't evict active MMSIs
+            if (cached) cached.lastUpdated = Date.now()
+            return
+        }
         //#endregion
 
         //#region Historical position update
-        try { 
-
-            let cached = lastPositionsCache.get(parseInt(mmsi))
-            
-            if (!cached) {
-                const [dbResult] = await fastify.mariadb.query(
-                    'SELECT * FROM current_vessel_positions WHERE mmsi = ?',
-                    [mmsi]
-                )
-                if (dbResult) {
-                    cached = {
-                        position: {
-                            mmsi: dbResult.mmsi,
-                            vesselName: dbResult.vessel_name,
-                            navigationalStatus: dbResult.navigational_status,
-                            rateOfTurn: dbResult.rate_of_turn,
-                            speedOverGround: dbResult.speed_over_ground,
-                            courseOverGround: dbResult.course_over_ground,
-                            heading: dbResult.heading,
-                            longitude: dbResult.longitude,
-                            latitude: dbResult.latitude,
-                            specialManoeuvre: dbResult.special_manoeuvre,
-                            communicationState: dbResult.communication_state,
-                            timestamp: dbResult.timestamp,
-                        },
-                        lastUpdated: Date.now(),
-                    }
-                    lastPositionsCache.set(parseInt(mmsi), cached)
-                }
-            }
-
-            const lastPosition = cached ? cached.position : null
+        try {
+            // Use the cached value we loaded earlier (if any)
+            const existingPosition = lastPosition
 
             let shouldInsertHistory = false
-            if (!lastPosition) {
+            if (!existingPosition) {
                 shouldInsertHistory = true
             } else {
                 const positionChanged =
-                    Math.round(lastPosition.longitude! * 1e3) !== Math.round(longitude * 1e3) ||
-                    Math.round(lastPosition.latitude! * 1e3) !== Math.round(latitude * 1e3)
+                    Math.round(existingPosition.longitude! * 1e3) !== Math.round(longitude * 1e3) ||
+                    Math.round(existingPosition.latitude! * 1e3) !== Math.round(latitude * 1e3)
 
-                const lastTs = lastPosition.timestamp
-                    ? new Date(lastPosition.timestamp)
-                    : new Date(0)
+                const lastTsDate = existingPosition.timestamp ? new Date(existingPosition.timestamp) : new Date(0)
                 const nowTs = new Date(timestamp)
-                const timeExceeded =
-                    nowTs.getTime() - lastTs.getTime() > 60 * 60 * 1000 
+                const timeExceeded = nowTs.getTime() - lastTsDate.getTime() > 60 * 60 * 1000
 
-                if (positionChanged) {
-                    shouldInsertHistory = true
-                }
-                if (timeExceeded) {
-                    shouldInsertHistory = true
-                }
+                if (positionChanged || timeExceeded) shouldInsertHistory = true
             }
 
             if (shouldInsertHistory) {
@@ -258,9 +225,7 @@ export async function handlePositionReportMessage(
             }
 
             if (historicalBatch.length >= batchSize) {
-                const placeholders = historicalBatch
-                    .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                    .join(', ')
+                const placeholders = historicalBatch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
                 const flatValues = historicalBatch.flat()
                 const flushedCount = historicalBatch.length
                 await fastify.mariadb.query(
@@ -276,7 +241,42 @@ export async function handlePositionReportMessage(
                 console.log(chalk.green(`Flushed ${flushedCount} historical positions to database`))
             }
 
-            //#region Update cache with new position AFTER history logic
+            // Update current position in DB and cache AFTER history logic
+            await fastify.mariadb.query(
+                `
+                INSERT INTO current_vessel_positions (
+                    mmsi, vesselName, navigationalStatus, rateOfTurn, speedOverGround, courseOverGround, heading,
+                    longitude, latitude, specialManoeuvre, communicationState, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    vesselName = VALUES(vesselName),
+                    navigationalStatus = VALUES(navigationalStatus),
+                    rateOfTurn = VALUES(rateOfTurn),
+                    speedOverGround = VALUES(speedOverGround),
+                    courseOverGround = VALUES(courseOverGround),
+                    heading = VALUES(heading),
+                    longitude = VALUES(longitude),
+                    latitude = VALUES(latitude),
+                    specialManoeuvre = VALUES(specialManoeuvre),
+                    communicationState = VALUES(communicationState),
+                    timestamp = VALUES(timestamp)
+            `,
+                [
+                    mmsi,
+                    vesselName,
+                    navigationalStatus,
+                    rateOfTurn,
+                    speedOverGround,
+                    courseOverGround,
+                    heading,
+                    longitude,
+                    latitude,
+                    specialManoeuvre,
+                    communicationState,
+                    timestamp,
+                ]
+            )
+
             lastPositionsCache.set(mmsiNumber, {
                 position: {
                     mmsi: mmsi,
@@ -294,8 +294,7 @@ export async function handlePositionReportMessage(
                 },
                 lastUpdated: Date.now(),
             })
-            //#endregion
-
+        
         } catch (err) {
             console.error(
                 chalk.red(`Error updating historical positions for MMSI ${metaData.MMSI}:`),

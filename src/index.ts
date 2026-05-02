@@ -1,12 +1,17 @@
-import Fastify, { type FastifyInstance } from 'fastify'
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify'
 import fastifyMariaDB from 'fastify-mariadb'
 import fastifySensible from '@fastify/sensible'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUI from '@fastify/swagger-ui'
+import fastifyCors from '@fastify/cors'
+import fastifyRateLimit from '@fastify/rate-limit'
+
 import path from 'path'
 import { fileURLToPath } from 'url'
 
 import { loadLastPositionsFromDatabase, startHistoricalBatchFlush } from './handler/PositionReport.js'
+import { startBaseStationBatchFlush } from './handler/BaseStationReport.js'
+import { startStaticShipBatchFlush } from './handler/ShipStaticData.js'
 import { Scraper } from './data/scraper/index.js'
 import { AISStreamClient } from './data/aisstream.js'
 
@@ -42,7 +47,14 @@ const fastify = Fastify({
     logger: true,
 })
 
-fastify.register(fastifySensible)
+fastify.register(fastifySensible, {
+    sharedSchemaId: 'HttpError'
+})
+
+fastify.register(fastifyCors, {
+    origin: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+})
 
 fastify.register(fastifySwagger as any, {
     openapi: {
@@ -110,6 +122,14 @@ fastify.register(fastifyMariaDB, {
     timezone: 'Z',
 })
 
+//#region Rate Limiting
+fastify.register(fastifyRateLimit, {
+    max: 1000,
+    timeWindow: '1 minute',
+    allowList: ['127.0.0.1'],
+})
+//#endregion
+
 const AISClient = new AISStreamClient(fastify)
 const scraper = new Scraper(fastify)
 
@@ -138,14 +158,26 @@ async function doStartupTasks() {
     await AISClient.createSocket()
 
     await loadLastPositionsFromDatabase(fastify)
+    
+    // Start periodic flushers for queued handlers
     startHistoricalBatchFlush(fastify)
+    startBaseStationBatchFlush(fastify)
+    startStaticShipBatchFlush(fastify)
 
     const portsFilePath = path.join(__dirname, '../public/WPI_Ports.csv')
-    await importPorts(fastify, portsFilePath).then(() => {
-        console.log(chalk.green('Port data import completed.'))
-    }).catch((err) => {
-        console.error(chalk.red('Error importing port data:'), err)
-    })
+    try {
+        const rows = await fastify.mariadb.query('SELECT COUNT(*) as cnt FROM ports')
+        const portCount = Array.isArray(rows) ? rows[0]?.cnt ?? 0 : 0
+
+        if (portCount === 0 && process.env.SKIP_PORT_IMPORT !== 'true') {
+            await importPorts(fastify, portsFilePath)
+            console.log(chalk.green('Port data import completed.'))
+        } else {
+            console.log(chalk.yellow('Skipping port import — table already populated or SKIP_PORT_IMPORT=true'))
+        }
+    } catch (err) {
+        console.error(chalk.red('Error checking/importing port data:'), err)
+    }
 
     scraper.startUpdateOldVesselsInterval()
 
