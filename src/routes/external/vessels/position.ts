@@ -18,10 +18,10 @@ export default function positionRoutes(
                     type: 'object',
                     required: ['minLat', 'maxLat', 'minLon', 'maxLon'],
                     properties: {
-                        minLat: { type: 'number', minimum: -90, maximum: 90 },
-                        maxLat: { type: 'number', minimum: -90, maximum: 90 },
-                        minLon: { type: 'number', minimum: -180, maximum: 180 },
-                        maxLon: { type: 'number', minimum: -180, maximum: 180 },
+                        minLat: { type: 'number' },
+                        maxLat: { type: 'number' },
+                        minLon: { type: 'number' },
+                        maxLon: { type: 'number' },
                         limit: { type: 'integer', minimum: 1, maximum: 100000 },
                         filterAisTypes: {
                             type: 'array',
