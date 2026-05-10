@@ -48,7 +48,7 @@ export default function positionRoutes(
             }
 
             let query = `
-        SELECT vp.*, s.vesselType AS aisType
+        SELECT vp.*, s.vesselType
         FROM current_vessel_positions vp
         LEFT JOIN static_ship_data s ON s.mmsi = vp.mmsi
         WHERE vp.latitude BETWEEN ? AND ?
@@ -96,7 +96,7 @@ export default function positionRoutes(
                     },
                 },
                 response: {
-                    200: VesselPositionSchema,
+                    200: VesselPositionSchemaWithType,
                     400: { $ref: 'HttpError' },
                     404: { $ref: 'HttpError' },
                     500: { $ref: 'HttpError' },
@@ -107,11 +107,11 @@ export default function positionRoutes(
         async (request, reply) => {
             try {
                 const result = await fastify.mariadb.query(
-                    'SELECT * FROM current_vessel_positions WHERE mmsi = ?',
+                    'SELECT vp.*, s.vesselType FROM current_vessel_positions vp LEFT JOIN static_ship_data s ON s.mmsi = vp.mmsi WHERE vp.mmsi = ?',
                     [request.params.mmsi]
                 )
 
-                const vessel = result[0] as VesselPosition
+                const vessel = result[0] as VesselPositionWithType
 
                 if (!vessel) {
                     throw fastify.httpErrors.notFound(

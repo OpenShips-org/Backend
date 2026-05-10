@@ -14,7 +14,7 @@ export type VesselPosition = {
 }
 
 export type VesselPositionWithType = VesselPosition & {
-    aisType: number | null
+    vesselType: number | null
 }
 
 export type BaseStationPosition = {
