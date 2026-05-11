@@ -79,13 +79,12 @@ export default function vesselPagedRoutes(
             },
         },
         async (request, reply) => {
-            const { page, pageSize, sortBy = 'mmsi', sortOrder = 'ASC' } = request.query
+            const { page, pageSize } = request.query
             try {
                 const [rows] = await fastify.mariadb.query(
                     `
           SELECT DISTINCT mmsi
           FROM current_vessel_positions
-          ORDER BY ${sortBy} ${sortOrder}
           LIMIT ? OFFSET ?
         `,
                     [pageSize, (page - 1) * pageSize]
