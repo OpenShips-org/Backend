@@ -63,7 +63,7 @@ export default function vesselPagedRoutes(
                     required: ['page', 'pageSize'],
                     properties: {
                         page: { type: 'integer', minimum: 1 },
-                        pageSize: { type: 'integer', minimum: 1, maximum: 1000 },
+                        pageSize: { type: 'integer', minimum: 1, maximum: 999999999 },
                         sortBy: { type: 'string', enum: ['mmsi', 'latitude', 'longitude', 'speed', 'course', 'timestamp', 'vesselName'] },
                         sortOrder: { type: 'string', enum: ['ASC', 'DESC'] },
                     },
