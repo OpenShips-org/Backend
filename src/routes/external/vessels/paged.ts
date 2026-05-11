@@ -32,7 +32,7 @@ export default function vesselPagedRoutes(
             },
         },
         async (request, reply) => {
-            const { page, pageSize, sortBy, sortOrder } = request.query
+            const { page, pageSize, sortBy = 'mmsi', sortOrder = 'ASC' } = request.query
             const offset = (page - 1) * pageSize
 
             try {
@@ -79,15 +79,16 @@ export default function vesselPagedRoutes(
             },
         },
         async (request, reply) => {
+            const { page, pageSize, sortBy = 'mmsi', sortOrder = 'ASC' } = request.query
             try {
                 const [rows] = await fastify.mariadb.query(
                     `
           SELECT DISTINCT mmsi
           FROM current_vessel_positions
-          ORDER BY ${request.query.sortBy} ${request.query.sortOrder}
+          ORDER BY ${sortBy} ${sortOrder}
           LIMIT ? OFFSET ?
         `,
-                    [request.query.pageSize, (request.query.page - 1) * request.query.pageSize]
+                    [pageSize, (page - 1) * pageSize]
                 )
                 return rows.map((row: any) => row.mmsi)
             } catch (error) {
