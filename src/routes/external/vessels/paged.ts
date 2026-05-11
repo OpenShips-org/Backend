@@ -36,7 +36,7 @@ export default function vesselPagedRoutes(
             const offset = (page - 1) * pageSize
 
             try {
-                const [rows] = await fastify.mariadb.query(
+                                const rows = await fastify.mariadb.query(
                     `
           SELECT vp.*, s.vesselType
           FROM current_vessel_positions vp
@@ -81,7 +81,7 @@ export default function vesselPagedRoutes(
         async (request, reply) => {
             const { page, pageSize } = request.query
             try {
-                const [rows] = await fastify.mariadb.query(
+                                const rows = await fastify.mariadb.query(
                     `
           SELECT DISTINCT mmsi
           FROM current_vessel_positions
@@ -89,10 +89,12 @@ export default function vesselPagedRoutes(
         `,
                     [pageSize, (page - 1) * pageSize]
                 )
-                return rows.map((row: any) => row.mmsi)
+                                return rows.map((row: any) => row.mmsi)
             } catch (error) {
                 request.log.error('Database query failed: ' + error)
-                return reply.internalServerError('Failed to retrieve MMSI list')
+                const msg = error instanceof Error ? error.message : String(error)
+                request.log.error('MMSI list error detail: ' + msg)
+                return reply.internalServerError('Failed to retrieve MMSI list: ' + msg)
             }
         }
     )
@@ -115,13 +117,15 @@ export default function vesselPagedRoutes(
         },
         async (request, reply) => {
             try {
-                const [rows] = await fastify.mariadb.query(
+                const rows = await fastify.mariadb.query(
                     'SELECT COUNT(DISTINCT mmsi) AS count FROM current_vessel_positions'
                 )
                 return { count: rows[0].count }
             } catch (error) {
                 request.log.error('Database query failed: ' + error)
-                return reply.internalServerError('Failed to retrieve MMSI count')
+                const msg = error instanceof Error ? error.message : String(error)
+                request.log.error('MMSI count error detail: ' + msg)
+                return reply.internalServerError('Failed to retrieve MMSI count: ' + msg)
             }
         }
     )
