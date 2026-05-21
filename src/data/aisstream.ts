@@ -2,6 +2,8 @@ import { dispatchMessage } from '../handler/dispatcher.js'
 import type { FastifyInstance } from 'fastify'
 import chalk from 'chalk'
 import WebSocket from 'ws'
+import net from 'net'
+import tls from 'tls'
 
 export class AISStreamClient {
     private ws: WebSocket | null = null
@@ -32,7 +34,32 @@ export class AISStreamClient {
         if (this.ws) {
             this.ws.close()
         }
-        this.ws = new WebSocket(this.url)
+
+        const certValid = await checkAisStreamCert()
+        if (!certValid) {
+            if (process.env.ALLOW_INVALID_CERTS === 'true') {
+                console.warn(
+                    chalk.yellow(
+                        'Warning: AISStream SSL certificate is invalid or expired. Proceeding with insecure connection.'
+                    )
+                )
+            } else {
+                console.error(
+                    chalk.red(
+                        'Error: AISStream SSL certificate is invalid or expired. Set ALLOW_INVALID_CERTS=true to proceed anyway.'
+                    )
+                )
+                return
+            }
+        }
+
+        const wsOptions = certValid
+            ? {}
+            : {
+                  rejectUnauthorized: false,
+              }
+
+        this.ws = new WebSocket(this.url, wsOptions)
 
         this.ws.on('open', () => {
             console.log('WebSocket connection opened.')
@@ -70,7 +97,8 @@ export class AISStreamClient {
             )
 
             if (this.reconnectAttempts < this.maxRetries) {
-                const delay = this.retryDelay * Math.pow(2, this.reconnectAttempts)
+                const delay =
+                    this.retryDelay * Math.pow(2, this.reconnectAttempts)
                 setTimeout(() => this.createSocket(), delay)
                 console.log(
                     `Reconnecting WebSocket... attempt ${this.reconnectAttempts + 1}`
@@ -80,7 +108,6 @@ export class AISStreamClient {
         })
 
         this.ws.on('message', async (rawData) => {
-
             this.messageCounter++
 
             try {
@@ -90,7 +117,10 @@ export class AISStreamClient {
                 const msg = JSON.parse(payload)
 
                 if (msg?.error) {
-                    console.error('AISStream subscription/server error:', msg.error)
+                    console.error(
+                        'AISStream subscription/server error:',
+                        msg.error
+                    )
                     return
                 }
 
@@ -102,7 +132,44 @@ export class AISStreamClient {
     }
 
     displayCounter() {
-        console.log(chalk.magenta(`Total messages received in the last ${this.displayInterval} ms: ${this.messageCounter}`))
+        console.log(
+            chalk.magenta(
+                `Total messages received in the last ${this.displayInterval} ms: ${this.messageCounter}`
+            )
+        )
         this.messageCounter = 0
     }
+}
+
+export function checkAisStreamCert(): Promise<boolean> {
+    return new Promise((resolve) => {
+        const socket = net.createConnection(443, 'stream.aisstream.io', () => {
+            const tlsSocket = tls.connect(
+                {
+                    socket,
+                    servername: 'stream.aisstream.io',
+                    rejectUnauthorized: false,
+                },
+                () => {
+                    const cert = tlsSocket.getPeerCertificate()
+
+                    if (!cert || !cert.valid_to) {
+                        tlsSocket.destroy()
+                        return resolve(false)
+                    }
+
+                    const notAfter = new Date(cert.valid_to)
+                    const now = new Date()
+
+                    tlsSocket.destroy()
+                    resolve(notAfter > now)
+                }
+            )
+
+            tlsSocket.on('error', (err) => {
+                console.error('TLS connection error:', err)
+                resolve(false)
+            })
+        })
+    })
 }

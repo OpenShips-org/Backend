@@ -39,7 +39,7 @@ dotenv.config()
 const parsedPort = Number(process.env.PORT)
 const PORT = Number.isInteger(parsedPort) && parsedPort >= 0 && parsedPort < 65536
     ? parsedPort
-    : 3000
+    : 4000
 //#endregion
 
 //#region Fastify Setup

@@ -34,6 +34,11 @@ export class Scraper {
     private isProcessingQueue = false
 
     constructor(fastify: FastifyInstance) {
+
+        if (process.env.EQUASIS_ENABLED !== 'true') {
+            throw new Error('EQUASIS_ENABLED environment variable must be set to true')
+        }
+
         if (!process.env.EQUASIS_USERNAME || !process.env.EQUASIS_PASSWORD) {
             throw new Error(
                 'EQUASIS_USERNAME and EQUASIS_PASSWORD environment variables must be set'
