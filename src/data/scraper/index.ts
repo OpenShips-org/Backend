@@ -428,7 +428,7 @@ export class Scraper {
             .split('T')[0]
 
         const [rows] = await this.fastify.mariadb.query(
-            `SELECT imo_number FROM vessels WHERE last_scraped < ?`,
+            `SELECT imo_number FROM vessel_data WHERE last_scraped < ?`,
             [sevenDaysAgo]
         )
         const imoNumbers = rows.map((row: any) => row.imo_number)

@@ -137,6 +137,29 @@ export class AISStreamClient {
                 `Total messages received in the last ${this.displayInterval} ms: ${this.messageCounter}`
             )
         )
+
+        // If no messages were received in the last interval, restart the WebSocket
+        if (this.messageCounter === 0) {
+            console.warn(
+                chalk.yellow(
+                    `No messages received in the last ${this.displayInterval} ms — reconnecting WebSocket.`
+                )
+            )
+
+            try {
+                // terminate existing socket immediately
+                this.ws?.terminate()
+            } catch (e) {
+                console.error('Error terminating WebSocket before reconnect:', e)
+            }
+
+            // reset reconnect attempts so createSocket doesn't backoff excessively
+            this.reconnectAttempts = 0
+
+            // schedule a fresh socket creation
+            setTimeout(() => this.createSocket(), 1000)
+        }
+
         this.messageCounter = 0
     }
 }
